@@ -140,6 +140,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       if (_nuevoEstado.toLowerCase() != widget.initialStatus.toLowerCase()) {
         await FirebaseFirestore.instance.collection('productos').doc(widget.productId).update({
           'estado': _nuevoEstado.toLowerCase(),
+          'updatedAt': FieldValue.serverTimestamp(),
         });
       }
 

@@ -92,6 +92,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'estado': _estado,
         'fechaCompra': _fechaCompra, // Se guarda como Timestamp
         'fechaCreacion': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
         'imagenUrl': imageUrl,
         // Mapa de ubicación
         'ubicacion': {

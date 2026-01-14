@@ -115,6 +115,7 @@ Future<String?> _uploadToSupabase() async {
       'nombre': _nombreController.text,
       'descripcion': _descripcionController.text,
       'imagenUrl': newImageUrl, // Guardamos la nueva URL (o la anterior si no se subió nada)
+      'updatedAt': FieldValue.serverTimestamp(),
     });
 
     if (mounted) {
