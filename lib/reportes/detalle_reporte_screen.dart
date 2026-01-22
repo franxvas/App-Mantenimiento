@@ -187,7 +187,7 @@ class DetalleReporteScreen extends StatelessWidget {
           _DetailRow(icon: FontAwesomeIcons.tag, label: "Tipo de Reporte", value: data['tipo_reporte'] ?? 'General'),
           // Mostramos el Bloque correcto
           _DetailRow(icon: FontAwesomeIcons.building, label: "Bloque", value: ubicacion['bloque'] ?? '--'),
-          _DetailRow(icon: FontAwesomeIcons.layerGroup, label: "Nivel", value: ubicacion['nivel'] ?? '--'),
+          _DetailRow(icon: FontAwesomeIcons.layerGroup, label: "Piso", value: ubicacion['piso'] ?? ubicacion['nivel'] ?? '--'),
         ],
       ),
     );
