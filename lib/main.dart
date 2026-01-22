@@ -12,6 +12,7 @@ import 'package:appmantflutter/reportes/reportes_screen.dart';
 import 'package:appmantflutter/usuarios/lista_usuarios_screen.dart';
 import 'package:appmantflutter/scan/qr_scanner_screen.dart'; // NUEVO: Import del Escáner
 import 'package:appmantflutter/dashboard/dashboard_screen.dart';
+import 'package:appmantflutter/parametros/parametros_screen.dart';
 
 // 1. PUNTO DE ENTRADA
 void main() async {
@@ -159,7 +160,22 @@ class MainMenuScreen extends StatelessWidget {
                   },
                 ),
 
-                // BOTÓN 4: USUARIOS
+                // BOTÓN 4: PARÁMETROS
+                _MenuCard(
+                  title: "Parámetros",
+                  icon: Icons.tune,
+                  color: const Color(0xFF1ABC9C),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ParametrosScreen(),
+                      ),
+                    );
+                  },
+                ),
+
+                // BOTÓN 5: USUARIOS
                 _MenuCard(
                   title: "Usuarios",
                   icon: Icons.group_outlined,

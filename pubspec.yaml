@@ -23,6 +23,9 @@ dependencies:
   pdf: ^3.11.3               # Para generar PDFs
   printing: ^5.14.2         # Para imprimir PDFs
   http: ^1.6.0               # Para hacer peticiones HTTP
+  firebase_storage: ^12.1.1
+  path_provider: ^2.1.4
+  open_filex: ^4.4.0
 
 
 dev_dependencies:
