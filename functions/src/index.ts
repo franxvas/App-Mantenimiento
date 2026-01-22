@@ -359,3 +359,87 @@ export const syncProductsToExcel = onDocumentWritten(
     }
   }
 );
+
+export const initSchemasFromTemplates = onRequest(async (_req, res) => {
+  const templatesDir = path.resolve(__dirname, "../assets/excel_templates");
+  const files = await fs.readdir(templatesDir);
+  const db = getFirestore();
+  const aliases = {
+    nivel: "piso"
+  };
+
+  const schemaResults: Array<{ disciplina: string; fields: number }> = [];
+  const excelResults: Array<{ key: string; type: string }> = [];
+
+  for (const file of files) {
+    const match = file.match(/^(.*)_(Base|Reportes)_ES\.xlsx$/i);
+    if (!match) {
+      continue;
+    }
+
+    const [, disciplineLabel, templateType] = match;
+    const disciplina = toDisciplineKey(disciplineLabel);
+    const key = path.basename(file, ".xlsx");
+
+    await db
+      .collection("parametros_excels")
+      .doc(key)
+      .set(
+        {
+          key,
+          disciplina,
+          templateType: templateType.toLowerCase(),
+          fileName: file,
+          path: `assets/excel_templates/${file}`,
+          updatedAt: FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+    excelResults.push({ key, type: templateType.toLowerCase() });
+
+    if (templateType.toLowerCase() !== "base") {
+      continue;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const filePath = path.join(templatesDir, file);
+    await workbook.xlsx.readFile(filePath);
+    const worksheet = workbook.worksheets[0];
+    const headerRow = worksheet?.getRow(1);
+    const fields: Array<{ key: string; displayName: string }> = [];
+
+    if (headerRow) {
+      headerRow.eachCell({ includeEmpty: false }, (cell) => {
+        const displayName = String(cell.text ?? cell.value ?? "").trim();
+        if (!displayName) {
+          return;
+        }
+        const keyName = toCamelCase(displayName);
+        if (!keyName) {
+          return;
+        }
+        fields.push({ key: keyName, displayName });
+      });
+    }
+
+    await db
+      .collection("parametros_schemas")
+      .doc(disciplina)
+      .set(
+        {
+          fields,
+          aliases,
+          updatedAt: FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+
+    schemaResults.push({ disciplina, fields: fields.length });
+  }
+
+  res.json({
+    status: "ok",
+    schemas: schemaResults,
+    excels: excelResults
+  });
+});
