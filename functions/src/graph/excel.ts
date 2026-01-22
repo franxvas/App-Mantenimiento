@@ -1,13 +1,15 @@
 import axios, { AxiosError } from "axios";
 import ExcelJS from "exceljs";
+import fs from "fs";
+import path from "path";
 import { GRAPH_TABLE_NAME, GRAPH_WORKSHEET_NAME, getGraphConfig } from "../config";
 import { getAccessToken } from "./auth";
 
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 const MAX_RETRIES = 5;
 
-let cachedWorkbookId: string | null = null;
-let cachedTableReady = false;
+const workbookCache = new Map<string, string>();
+const tableCache = new Set<string>();
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -88,25 +90,69 @@ const graphPut = async <T>(url: string, data: unknown, contentType: string): Pro
   throw new Error("Graph request failed after retries.");
 };
 
+const graphGetBuffer = async (url: string): Promise<Buffer> => {
+  const token = await getAccessToken();
+  const response = await axios.request<ArrayBuffer>({
+    method: "GET",
+    url: `${GRAPH_BASE_URL}${url}`,
+    responseType: "arraybuffer",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+  return Buffer.from(response.data);
+};
+
 const buildWorkbookBuffer = async (): Promise<Buffer> => {
   const workbook = new ExcelJS.Workbook();
   workbook.addWorksheet(GRAPH_WORKSHEET_NAME);
   return Buffer.from(await workbook.xlsx.writeBuffer());
 };
 
-export const resolveOrCreateWorkbook = async (): Promise<string> => {
-  if (cachedWorkbookId) {
-    return cachedWorkbookId;
-  }
+const buildTemplateBuffer = async (templateFilename: string): Promise<Buffer> => {
+  const templatePath = path.join(__dirname, "../../..", "assets/excel_templates", templateFilename);
+  return fs.readFileSync(templatePath);
+};
 
-  const { userId, workbookPath } = getGraphConfig();
+const normalizeDrivePath = (folder: string, filename: string): string => {
+  const normalizedFolder = folder.endsWith("/") ? folder.slice(0, -1) : folder;
+  return path.posix.join(normalizedFolder, filename);
+};
+
+const columnLetter = (index: number): string => {
+  let column = "";
+  let dividend = index + 1;
+  while (dividend > 0) {
+    let modulo = (dividend - 1) % 26;
+    column = String.fromCharCode(65 + modulo) + column;
+    dividend = Math.floor((dividend - modulo) / 26);
+  }
+  return column;
+};
+
+export const resolveOrCreateWorkbook = async (): Promise<string> => {
+  const { workbookPath } = getGraphConfig();
+  return resolveOrCreateWorkbookByPath(workbookPath);
+};
+
+export const resolveOrCreateWorkbookByPath = async (
+  itemPath: string,
+  templateFilename?: string,
+  useParametrosFolder = true
+): Promise<string> => {
+  const { userId, parametrosFolder } = getGraphConfig();
+  const drivePath = useParametrosFolder ? normalizeDrivePath(parametrosFolder, itemPath) : itemPath;
+
+  if (workbookCache.has(drivePath)) {
+    return workbookCache.get(drivePath) as string;
+  }
 
   try {
     const item = await graphRequest<{ id: string }>(
       "GET",
-      `/users/${userId}/drive/root:${workbookPath}`
+      `/users/${userId}/drive/root:${drivePath}`
     );
-    cachedWorkbookId = item.id;
+    workbookCache.set(drivePath, item.id);
     return item.id;
   } catch (error) {
     const axiosError = error as AxiosError;
@@ -115,18 +161,24 @@ export const resolveOrCreateWorkbook = async (): Promise<string> => {
     }
   }
 
-  const buffer = await buildWorkbookBuffer();
+  const buffer = templateFilename ? await buildTemplateBuffer(templateFilename) : await buildWorkbookBuffer();
   const created = await graphPut<{ id: string }>(
-    `/users/${userId}/drive/root:${workbookPath}:/content`,
+    `/users/${userId}/drive/root:${drivePath}:/content`,
     buffer,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   );
-  cachedWorkbookId = created.id;
+  workbookCache.set(drivePath, created.id);
   return created.id;
 };
 
-export const ensureWorksheetAndTable = async (itemId: string): Promise<void> => {
-  if (cachedTableReady) {
+export const ensureWorksheetAndTable = async (
+  itemId: string,
+  worksheetName = GRAPH_WORKSHEET_NAME,
+  tableName = GRAPH_TABLE_NAME,
+  headers: string[] = ["id", "nombre", "piso", "estado", "updatedAt"]
+): Promise<void> => {
+  const tableKey = `${itemId}:${tableName}`;
+  if (tableCache.has(tableKey)) {
     return;
   }
 
@@ -137,35 +189,36 @@ export const ensureWorksheetAndTable = async (itemId: string): Promise<void> => 
     `/users/${userId}/drive/items/${itemId}/workbook/worksheets`
   );
 
-  const hasWorksheet = worksheets.value.some((sheet) => sheet.name === GRAPH_WORKSHEET_NAME);
+  const hasWorksheet = worksheets.value.some((sheet) => sheet.name === worksheetName);
   if (!hasWorksheet) {
     await graphRequest(
       "POST",
       `/users/${userId}/drive/items/${itemId}/workbook/worksheets/add`,
-      { name: GRAPH_WORKSHEET_NAME }
+      { name: worksheetName }
     );
   }
-
-  await graphRequest(
-    "PATCH",
-    `/users/${userId}/drive/items/${itemId}/workbook/worksheets/${GRAPH_WORKSHEET_NAME}/range(address='A1:E1')`,
-    {
-      values: [["id", "nombre", "piso", "estado", "updatedAt"]]
-    }
-  );
 
   const tables = await graphRequest<{ value: Array<{ id: string; name: string }> }>(
     "GET",
     `/users/${userId}/drive/items/${itemId}/workbook/tables`
   );
 
-  const existing = tables.value.find((table) => table.name === GRAPH_TABLE_NAME);
+  const existing = tables.value.find((table) => table.name === tableName);
   if (!existing) {
+    const lastColumn = columnLetter(headers.length - 1);
+    await graphRequest(
+      "PATCH",
+      `/users/${userId}/drive/items/${itemId}/workbook/worksheets/${worksheetName}/range(address='A1:${lastColumn}1')`,
+      {
+        values: [headers]
+      }
+    );
+
     const created = await graphRequest<{ id: string }>(
       "POST",
       `/users/${userId}/drive/items/${itemId}/workbook/tables/add`,
       {
-        address: `${GRAPH_WORKSHEET_NAME}!A1:E1`,
+        address: `${worksheetName}!A1:${lastColumn}1`,
         hasHeaders: true
       }
     );
@@ -173,22 +226,32 @@ export const ensureWorksheetAndTable = async (itemId: string): Promise<void> => 
     await graphRequest(
       "PATCH",
       `/users/${userId}/drive/items/${itemId}/workbook/tables/${created.id}`,
-      { name: GRAPH_TABLE_NAME }
+      { name: tableName }
     );
   }
 
-  cachedTableReady = true;
+  tableCache.add(tableKey);
+};
+
+export const getWorksheetNames = async (itemId: string): Promise<string[]> => {
+  const { userId } = getGraphConfig();
+  const worksheets = await graphRequest<{ value: Array<{ name: string }> }>(
+    "GET",
+    `/users/${userId}/drive/items/${itemId}/workbook/worksheets`
+  );
+  return worksheets.value.map((sheet) => sheet.name);
 };
 
 export const findRowIndexById = async (
   itemId: string,
-  productId: string
+  productId: string,
+  tableName = GRAPH_TABLE_NAME
 ): Promise<number | null> => {
   const { userId } = getGraphConfig();
 
   const rows = await graphRequest<{ value: Array<{ index: number; values: string[][] }> }>(
     "GET",
-    `/users/${userId}/drive/items/${itemId}/workbook/tables/${GRAPH_TABLE_NAME}/rows`
+    `/users/${userId}/drive/items/${itemId}/workbook/tables/${tableName}/rows`
   );
 
   const match = rows.value.find((row) => row.values?.[0]?.[0] === productId);
@@ -198,14 +261,15 @@ export const findRowIndexById = async (
 export const upsertRow = async (
   itemId: string,
   rowIndex: number | null,
-  values: Array<string>
+  values: Array<string>,
+  tableName = GRAPH_TABLE_NAME
 ): Promise<void> => {
   const { userId } = getGraphConfig();
 
   if (rowIndex === null) {
     await graphRequest(
       "POST",
-      `/users/${userId}/drive/items/${itemId}/workbook/tables/${GRAPH_TABLE_NAME}/rows/add`,
+      `/users/${userId}/drive/items/${itemId}/workbook/tables/${tableName}/rows/add`,
       { values: [values] }
     );
     return;
@@ -213,16 +277,25 @@ export const upsertRow = async (
 
   await graphRequest(
     "PATCH",
-    `/users/${userId}/drive/items/${itemId}/workbook/tables/${GRAPH_TABLE_NAME}/rows/${rowIndex}`,
+    `/users/${userId}/drive/items/${itemId}/workbook/tables/${tableName}/rows/${rowIndex}`,
     { values: [values] }
   );
 };
 
-export const deleteRowByIndex = async (itemId: string, rowIndex: number): Promise<void> => {
+export const deleteRowByIndex = async (
+  itemId: string,
+  rowIndex: number,
+  tableName = GRAPH_TABLE_NAME
+): Promise<void> => {
   const { userId } = getGraphConfig();
 
   await graphRequest(
     "POST",
-    `/users/${userId}/drive/items/${itemId}/workbook/tables/${GRAPH_TABLE_NAME}/rows/${rowIndex}/delete`
+    `/users/${userId}/drive/items/${itemId}/workbook/tables/${tableName}/rows/${rowIndex}/delete`
   );
+};
+
+export const downloadWorkbook = async (itemId: string): Promise<Buffer> => {
+  const { userId } = getGraphConfig();
+  return graphGetBuffer(`/users/${userId}/drive/items/${itemId}/content`);
 };
