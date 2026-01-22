@@ -44,25 +44,29 @@ firebase functions:secrets:set GRAPH_CLIENT_SECRET
 | `GRAPH_WORKBOOK_PATH` | Ruta del Excel en OneDrive. | `/Apps/InteriorMaintenance/Productos.xlsx` |
 | `GRAPH_PARAMETROS_FOLDER` | Carpeta en OneDrive donde se almacenan los archivos de parámetros/plantillas consumidos por Graph. | `/Apps/InteriorMaintenance/Parametros` |
 
-### Ejecutar `initSchemasFromTemplates`
-`initSchemasFromTemplates` es una función administrativa pensada para inicializar esquemas desde las plantillas en Storage/Graph. Para ejecutarla manualmente con la CLI:
+### Ejecutar `initSchemas`
+`initSchemas` es una función administrativa pensada para inicializar esquemas desde las plantillas locales (`functions/assets/excel_templates`). Para ejecutarla manualmente con la CLI:
 
 ```bash
-firebase functions:shell
-# En la consola interactiva:
-initSchemasFromTemplates()
+curl -X POST https://<region>-<project-id>.cloudfunctions.net/initSchemas
 ```
 
-Si necesitas ejecutarla en un entorno específico, asegúrate de usar el proyecto correcto con `firebase use <project-id>` antes de abrir el shell.
+Si necesitas ejecutarla en un entorno específico, asegúrate de usar el proyecto correcto con `firebase use <project-id>` antes de desplegar.
 
 ### Migración `nivel` → `piso`
-Actualmente los documentos pueden traer el valor de ubicación como `ubicacion.nivel`, pero la salida hacia Excel utiliza `piso`. Para migrar datos existentes:
+Actualmente los documentos pueden traer el valor de ubicación como `ubicacion.nivel`, pero la salida hacia Excel utiliza `piso`. Para migrar datos existentes puedes ejecutar la función administrativa:
+
+```bash
+curl -X POST "https://<region>-<project-id>.cloudfunctions.net/migrateNivelToPiso?removeNivel=false"
+```
+
+Para eliminar el campo antiguo `nivel`, usa `removeNivel=true`.
 
 1. **Actualiza los clientes** para escribir `piso` (string/number) en el documento de `productos`.
 2. **Migra documentos existentes** copiando `ubicacion.nivel` → `piso`.
 3. **Depura el campo antiguo** (`ubicacion.nivel`) cuando todos los clientes ya lean/escriban `piso`.
 
-Ejemplo de script con Admin SDK (Node) para la migración:
+Ejemplo de script con Admin SDK (Node) para la migración manual:
 
 ```ts
 import { initializeApp } from "firebase-admin/app";
@@ -124,11 +128,10 @@ firebase deploy --only functions
 ```
 
 ### Ruta del Excel
-El archivo se crea/usa en:
+Los archivos se crean/usan en:
 
 ```
-/Apps/InteriorMaintenance/Productos.xlsx
+/Apps/InteriorMaintenance/Parametros/
 ```
 
-La tabla creada dentro del Excel es **TablaProductos** con columnas:
-`id, nombre, piso, estado, updatedAt`.
+Las plantillas Base_*.xlsx definen el esquema (headers) y la app se adapta automáticamente a las columnas nuevas.

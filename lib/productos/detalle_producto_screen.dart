@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart'; 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart'; // Para generar el QR
+import 'package:appmantflutter/services/schema_service.dart';
 
 // IMPORTACIONES DE TUS OTRAS PANTALLAS Y SERVICIOS
 import 'package:appmantflutter/reportes/generar_reporte_screen.dart'; 
@@ -18,6 +19,7 @@ class DetalleProductoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final productDocRef = FirebaseFirestore.instance.collection('productos').doc(productId);
+    final schemaService = SchemaService();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),
@@ -112,8 +114,10 @@ class DetalleProductoScreen extends StatelessWidget {
           final String productCategory = data['categoria'] ?? 'N/A';
           final bool isOperativo = initialStatus.toLowerCase() == 'operativo';
           final Map<String, dynamic> ubicacion = data['ubicacion'] ?? {};
+          final Map<String, dynamic> attrs = data['attrs'] ?? {};
           final String imageUrl = data['imagenUrl'] ?? ''; 
-          final String codigoQR = data['codigoQR'] ?? ''; 
+          final String codigoQR = (data['codigoQR'] ?? attrs['codigoQR'] ?? '').toString(); 
+          final String disciplina = data['disciplina'] ?? '';
 
           final Timestamp? tsCompra = data['fechaCompra'];
           final String fechaCompra = tsCompra != null
@@ -165,8 +169,8 @@ class DetalleProductoScreen extends StatelessWidget {
                   title: "Detalles del Equipo",
                   content: Column(
                     children: [
-                      _DetailRow(icon: FontAwesomeIcons.barcode, label: "Serie", value: data['serie'] ?? '--'),
-                      _DetailRow(icon: FontAwesomeIcons.tag, label: "Marca", value: data['marca'] ?? '--'),
+                      _DetailRow(icon: FontAwesomeIcons.barcode, label: "Serie", value: data['serie'] ?? attrs['serie'] ?? '--'),
+                      _DetailRow(icon: FontAwesomeIcons.tag, label: "Marca", value: data['marca'] ?? attrs['marca'] ?? '--'),
                       _DetailRow(icon: FontAwesomeIcons.gears, label: "Disciplina", value: data['disciplinaDisplay'] ?? data['disciplina'] ?? '--'),
                       _DetailRow(icon: FontAwesomeIcons.shapes, label: "Categoría", value: productCategory),
                       _DetailRow(icon: FontAwesomeIcons.layerGroup, label: "Subcategoría", value: data['subcategoria'] ?? '--'),
@@ -181,10 +185,28 @@ class DetalleProductoScreen extends StatelessWidget {
                   content: Column(
                     children: [
                       _DetailRow(icon: FontAwesomeIcons.building, label: "Bloque", value: ubicacion['bloque'] ?? '--'),
-                      _DetailRow(icon: FontAwesomeIcons.layerGroup, label: "Nivel", value: ubicacion['nivel'] ?? '--'),
+                      _DetailRow(icon: FontAwesomeIcons.layerGroup, label: "Piso", value: ubicacion['piso'] ?? data['piso'] ?? ubicacion['nivel'] ?? data['nivel'] ?? '--'),
                       _DetailRow(icon: FontAwesomeIcons.mapPin, label: "Área", value: ubicacion['area'] ?? '--'),
                     ],
                   ),
+                ),
+
+                StreamBuilder<SchemaSnapshot?>(
+                  stream: disciplina.isNotEmpty ? schemaService.streamSchema(disciplina) : Stream.empty(),
+                  builder: (context, schemaSnap) {
+                    final schema = schemaSnap.data;
+                    if (schema == null) {
+                      return const SizedBox.shrink();
+                    }
+                    final dynamicRows = _buildDynamicDetails(schema.fields, data, attrs);
+                    if (dynamicRows.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return _buildSection(
+                      title: "Parámetros",
+                      content: Column(children: dynamicRows),
+                    );
+                  },
                 ),
                 
                 // Lista de Reportes
@@ -348,6 +370,35 @@ class DetalleProductoScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+List<Widget> _buildDynamicDetails(
+  List<SchemaField> fields,
+  Map<String, dynamic> data,
+  Map<String, dynamic> attrs,
+) {
+  const excluded = <String>{
+    'nombre',
+    'estado',
+    'piso',
+    'bloque',
+    'area',
+    'disciplina',
+    'categoria',
+    'subcategoria',
+    'descripcion',
+    'fechaCompra',
+    'updatedAt',
+    'imagenUrl',
+  };
+
+  return fields
+      .where((field) => !excluded.contains(field.key))
+      .map((field) {
+        final value = attrs[field.key] ?? data[field.key] ?? '--';
+        return _DetailRow(icon: FontAwesomeIcons.list, label: field.displayName, value: value.toString());
+      })
+      .toList();
 }
 
 class _DetailRow extends StatelessWidget {

@@ -191,7 +191,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             ),
             
             _buildReadOnlyField("Activo*", "${widget.productName}\n${widget.productCategory}"),
-            _buildReadOnlyField("Ubicación", "Bloque: ${widget.productLocation['bloque'] ?? '--'} - Nivel: ${widget.productLocation['nivel'] ?? '--'}"),
+            _buildReadOnlyField("Ubicación", "Bloque: ${widget.productLocation['bloque'] ?? '--'} - Piso: ${widget.productLocation['piso'] ?? widget.productLocation['nivel'] ?? '--'}"),
             _buildReadOnlyField("Categoría", widget.productCategory),
             _buildReadOnlyField("Estado Actual", widget.initialStatus),
             
