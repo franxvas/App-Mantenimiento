@@ -1,18 +1,10 @@
 import { initializeApp } from "firebase-admin/app";
-import { FieldValue, Timestamp, getFirestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
-import { onDocumentWritten } from "firebase-functions/v2/firestore";
-import { onRequest } from "firebase-functions/v2/https";
-import { graphClientSecret } from "./config";
-import {
-  deleteRowByIndex,
-  downloadWorkbook,
-  ensureWorksheetAndTable,
-  findRowIndexById,
-  getWorksheetNames,
-  resolveOrCreateWorkbookByPath,
-  upsertRow
-} from "./graph/excel";
+import * as functions from "firebase-functions";
+import ExcelJS from "exceljs";
+import fs from "fs/promises";
+import path from "path";
 import { getTemplateDefinitions, initSchemasFromTemplates } from "./parametros/schema";
 
 initializeApp();
@@ -20,122 +12,109 @@ initializeApp();
 const firestore = getFirestore();
 const storage = getStorage();
 
-type SchemaField = {
-  key: string;
-  displayName: string;
-  type: string;
-  required: boolean;
-  order: number;
+const TEMPLATE_DIR = path.join(__dirname, "..", "assets", "excel_templates");
+const EXCEL_CONTENT_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+const resolveTemplatePath = (filename: string) => path.join(TEMPLATE_DIR, filename);
+
+const getHeaderValues = (worksheet: ExcelJS.Worksheet): string[] => {
+  const headerRow = worksheet.getRow(1);
+  const values = headerRow.values as Array<string | number | null | undefined>;
+  return values
+    .slice(1)
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => value.length > 0);
 };
 
-type SchemaData = {
-  fields: SchemaField[];
-  aliases: Record<string, string>;
-};
-
-const schemaCache = new Map<string, SchemaData>();
-
-const normalizeValue = (value: unknown): string => {
-  if (value === null || value === undefined) {
-    return "";
+const ensureIdHeader = (headers: string[]) => {
+  const hasId = headers.some((header) => header.trim().toLowerCase() === "id");
+  if (hasId) {
+    return headers;
   }
-  return String(value);
+  return ["id", ...headers];
 };
 
-const getUpdatedAtIso = (data: Record<string, unknown> | undefined, fallback: string): string => {
-  const updatedAt = data?.updatedAt as { toDate?: () => Date } | undefined;
-  if (updatedAt?.toDate) {
-    return updatedAt.toDate().toISOString();
-  }
-  return fallback;
-};
+const resolveCellValue = (data: Record<string, unknown>, header: string): string => {
+  const normalized = header.trim().toLowerCase();
 
-const getSchemaForDisciplina = async (disciplina: string): Promise<SchemaData | null> => {
-  if (schemaCache.has(disciplina)) {
-    return schemaCache.get(disciplina) as SchemaData;
-  }
-
-  const doc = await firestore.collection("parametros_schemas").doc(disciplina).get();
-  if (!doc.exists) {
-    return null;
-  }
-
-  const data = doc.data() ?? {};
-  const fields = (data.fields ?? []) as SchemaField[];
-  const aliases = (data.aliases ?? {}) as Record<string, string>;
-  const schema = { fields, aliases };
-  schemaCache.set(disciplina, schema);
-  return schema;
-};
-
-const getFieldValue = (
-  data: Record<string, unknown>,
-  attrs: Record<string, unknown>,
-  fieldKey: string,
-  aliases: Record<string, string>,
-  fallbackUpdatedAt: string
-): string => {
-  if (fieldKey === "id") {
+  if (normalized === "id") {
     return "";
   }
 
-  if (fieldKey === "updatedAt") {
-    return getUpdatedAtIso(data, fallbackUpdatedAt);
+  if (normalized === "nombre") {
+    return String(data.nombre ?? data["nombre"] ?? "");
   }
 
-  const directValue = data[fieldKey] ?? attrs[fieldKey];
-  if (directValue !== undefined && directValue !== null) {
-    return normalizeValue(directValue);
+  if (normalized === "piso") {
+    const ubicacion = (data.ubicacion as { nivel?: string | number } | undefined) ?? undefined;
+    const pisoValue = data.piso ?? ubicacion?.nivel;
+    return pisoValue !== undefined && pisoValue !== null ? String(pisoValue) : "";
   }
 
-  if (fieldKey === "piso") {
-    const ubicacion = data.ubicacion as { piso?: string | number; nivel?: string | number } | undefined;
-    if (ubicacion?.piso !== undefined) {
-      return normalizeValue(ubicacion.piso);
-    }
-    if (ubicacion?.nivel !== undefined) {
-      return normalizeValue(ubicacion.nivel);
-    }
+  if (normalized === "estado") {
+    return String(data.estado ?? "");
   }
 
-  for (const [alias, canonical] of Object.entries(aliases)) {
-    if (canonical !== fieldKey) {
-      continue;
-    }
-    const aliasValue = data[alias] ?? attrs[alias];
-    if (aliasValue !== undefined && aliasValue !== null) {
-      return normalizeValue(aliasValue);
-    }
+  const attrs = (data.attrs as Record<string, unknown>) ?? {};
+  const directValue = attrs[header] ?? attrs[normalized] ?? data[header] ?? data[normalized];
+  if (directValue === undefined || directValue === null) {
+    return "";
   }
-
-  return "";
+  return String(directValue);
 };
 
-const hasRelevantChange = (
-  beforeData: Record<string, unknown>,
-  afterData: Record<string, unknown>,
-  schema: SchemaData
-): boolean => {
-  const beforeAttrs = (beforeData.attrs as Record<string, unknown>) ?? {};
-  const afterAttrs = (afterData.attrs as Record<string, unknown>) ?? {};
-  const fallback = new Date().toISOString();
+const buildBaseWorkbookBuffer = async (disciplina: string, filename: string): Promise<Buffer> => {
+  const templatePath = resolveTemplatePath(filename);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(templatePath);
 
-  return schema.fields.some((field) => {
-    const beforeValue = getFieldValue(beforeData, beforeAttrs, field.key, schema.aliases, fallback);
-    const afterValue = getFieldValue(afterData, afterAttrs, field.key, schema.aliases, fallback);
-    return beforeValue !== afterValue;
+  const worksheet = workbook.worksheets[0] ?? workbook.addWorksheet("Datos");
+  const rawHeaders = getHeaderValues(worksheet);
+  const headers = ensureIdHeader(rawHeaders);
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.values = [null, ...headers];
+  headerRow.commit();
+
+  if (worksheet.rowCount > 1) {
+    worksheet.spliceRows(2, worksheet.rowCount - 1);
+  }
+
+  const snapshot = await firestore
+    .collection("productos")
+    .where("disciplina", "==", disciplina)
+    .get();
+
+  snapshot.docs.forEach((doc) => {
+    const data = doc.data() as Record<string, unknown>;
+    const row = headers.map((header) => {
+      if (header.trim().toLowerCase() === "id") {
+        return doc.id;
+      }
+      return resolveCellValue(data, header);
+    });
+    worksheet.addRow(row);
   });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
 };
 
-const buildColumns = (fields: SchemaField[]) => {
-  const columns = fields.map((field) => ({ key: field.key, displayName: field.displayName }));
-  if (!columns.some((column) => column.key === "id")) {
-    columns.unshift({ key: "id", displayName: "id" });
-  }
-  return columns;
+const buildReportesWorkbookBuffer = async (filename: string): Promise<Buffer> => {
+  const templatePath = resolveTemplatePath(filename);
+  const fileBuffer = await fs.readFile(templatePath);
+  return Buffer.from(fileBuffer);
 };
 
-export const initSchemas = onRequest(async (_req, res) => {
+const uploadWorkbook = async (filename: string, buffer: Buffer) => {
+  const storagePath = `parametros/${filename}`;
+  const bucket = storage.bucket();
+  await bucket.file(storagePath).save(buffer, { contentType: EXCEL_CONTENT_TYPE });
+  return storagePath;
+};
+
+export const initSchemas = functions.https.onRequest(async (_req, res) => {
   try {
     await initSchemasFromTemplates(firestore);
     res.status(200).json({ status: "ok" });
@@ -145,301 +124,91 @@ export const initSchemas = onRequest(async (_req, res) => {
   }
 });
 
-export const migrateNivelToPiso = onRequest(async (req, res) => {
-  const removeNivel = req.query.removeNivel === "true";
-  const batchSize = 300;
-  let lastDoc: QueryDocumentSnapshot | undefined;
-  let total = 0;
-
+export const initParametrosCatalog = functions.https.onRequest(async (_req, res) => {
   try {
-    while (true) {
-      let query = firestore.collection("productos").orderBy("updatedAt").limit(batchSize);
-      if (lastDoc) {
-        query = query.startAfter(lastDoc);
-      }
-      const snapshot = await query.get();
-      if (snapshot.empty) {
-        break;
-      }
+    const batch = firestore.batch();
+    const updatedAt = FieldValue.serverTimestamp();
 
-      const batch = firestore.batch();
-      snapshot.docs.forEach((doc) => {
-        const data = doc.data() as Record<string, unknown>;
-        const piso = data.piso ?? (data.ubicacion as { piso?: string } | undefined)?.piso;
-        const nivel = data.nivel ?? (data.ubicacion as { nivel?: string } | undefined)?.nivel;
-        if (!piso && nivel) {
-          const ubicacion = (data.ubicacion as Record<string, unknown>) ?? {};
-          batch.update(doc.ref, {
-            piso: nivel,
-            ubicacion: {
-              ...ubicacion,
-              piso: nivel,
-              ...(removeNivel ? { nivel: FieldValue.delete() } : {})
-            },
-            ...(removeNivel ? { nivel: FieldValue.delete() } : {}),
-            updatedAt: FieldValue.serverTimestamp()
-          });
-          total += 1;
-        }
-      });
+    getTemplateDefinitions().forEach((template) => {
+      const key = `${template.disciplina}_${template.tipo}`;
+      const docRef = firestore.collection("parametros_excels").doc(key);
+      batch.set(
+        docRef,
+        {
+          key,
+          disciplina: template.disciplina,
+          tipo: template.tipo,
+          filename: template.filename,
+          storagePath: `parametros/${template.filename}`,
+          generatedAt: null,
+          updatedAt
+        },
+        { merge: true }
+      );
+    });
 
-      await batch.commit();
-      lastDoc = snapshot.docs[snapshot.docs.length - 1];
-    }
+    await batch.commit();
 
-    res.status(200).json({ migrated: total });
+    res.status(200).json({ status: "ok" });
   } catch (error) {
-    console.error("migrateNivelToPiso failed", error);
+    console.error("initParametrosCatalog failed", error);
     res.status(500).json({ error: (error as Error).message });
   }
 });
 
-export const syncProductsToExcel = onDocumentWritten(
-  {
-    document: "productos/{productId}",
-    secrets: [graphClientSecret]
-  },
-  async (event) => {
-    const correlationId = event.id ?? `products-${Date.now()}`;
-    const productId = event.params.productId as string;
-    const beforeSnap = event.data?.before;
-    const afterSnap = event.data?.after;
-
-    if (!beforeSnap || !afterSnap) {
-      console.log({
-        correlationId,
-        productId,
-        status: "skipped",
-        reason: "missing_snapshot"
-      });
-      return;
-    }
-
-    const beforeExists = beforeSnap.exists;
-    const afterExists = afterSnap.exists;
-
-    let operation: "create" | "update" | "delete";
-    if (!beforeExists && afterExists) {
-      operation = "create";
-    } else if (beforeExists && !afterExists) {
-      operation = "delete";
-    } else {
-      operation = "update";
-    }
-
-    const beforeData = beforeSnap.data() as Record<string, unknown> | undefined;
-    const afterData = afterSnap.data() as Record<string, unknown> | undefined;
-    const sourceData = operation === "delete" ? beforeData : afterData;
-    if (!sourceData) {
-      console.log({
-        correlationId,
-        productId,
-        status: "skipped",
-        operation,
-        reason: "missing_data"
-      });
-      return;
-    }
-
-    const disciplina = sourceData.disciplina as string | undefined;
-    if (!disciplina) {
-      console.log({
-        correlationId,
-        productId,
-        status: "skipped",
-        operation,
-        reason: "missing_disciplina"
-      });
-      return;
-    }
-
-    const schema = await getSchemaForDisciplina(disciplina);
-    if (!schema) {
-      console.log({
-        correlationId,
-        productId,
-        status: "skipped",
-        operation,
-        reason: "schema_not_found",
-        disciplina
-      });
-      return;
-    }
-
-    if (operation === "update" && beforeData && afterData && !hasRelevantChange(beforeData, afterData, schema)) {
-      console.log({
-        correlationId,
-        productId,
-        status: "skipped",
-        operation,
-        reason: "no_relevant_changes"
-      });
-      return;
-    }
-
-    const template = getTemplateDefinitions().find(
-      (item) => item.disciplina === disciplina && item.tipo === "base"
-    );
-    if (!template) {
-      console.log({
-        correlationId,
-        productId,
-        status: "skipped",
-        operation,
-        reason: "template_not_found"
-      });
-      return;
-    }
-
-    const columns = buildColumns(schema.fields);
-    const attrs = (sourceData.attrs as Record<string, unknown>) ?? {};
-    const updatedAtFallback = event.time ?? new Date().toISOString();
-    const values = columns.map((column) => {
-      if (column.key === "id") {
-        return productId;
-      }
-      return getFieldValue(sourceData, attrs, column.key, schema.aliases, updatedAtFallback);
-    });
-
-    try {
-      const workbookId = await resolveOrCreateWorkbookByPath(template.filename, template.filename);
-      const worksheetNames = await getWorksheetNames(workbookId);
-      const worksheetName = worksheetNames[0] ?? "Productos";
-      const headers = columns.map((column) => column.displayName);
-      const tableName = `Tabla_${disciplina}_base`;
-      await ensureWorksheetAndTable(workbookId, worksheetName, tableName, headers);
-
-      const rowIndex = await findRowIndexById(workbookId, productId, tableName);
-
-      if (operation === "delete") {
-        if (rowIndex !== null) {
-          await deleteRowByIndex(workbookId, rowIndex, tableName);
-        }
-      } else {
-        await upsertRow(workbookId, rowIndex, values, tableName);
-      }
-
-      const workbookBuffer = await downloadWorkbook(workbookId);
-      const bucket = storage.bucket();
-      const storagePath = `parametros/${template.filename}`;
-      await bucket.file(storagePath).save(workbookBuffer, {
-        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      });
-
-      await firestore.collection("parametros_excels").doc(`${disciplina}_base`).set(
-        {
-          key: `${disciplina}_base`,
-          filename: template.filename,
-          disciplina,
-          tipo: "base",
-          storagePath,
-          generatedAt: Timestamp.now(),
-          lastSourceUpdateAt: Timestamp.now()
-        },
-        { merge: true }
-      );
-
-      console.log({
-        correlationId,
-        productId,
-        status: "success",
-        operation,
-        disciplina
-      });
-    } catch (error) {
-      console.error({
-        correlationId,
-        productId,
-        status: "error",
-        operation,
-        disciplina,
-        error: (error as Error).message
-      });
-      throw error;
-    }
-  }
-);
-
-export const initSchemasFromTemplates = onRequest(async (_req, res) => {
-  const templatesDir = path.resolve(__dirname, "../assets/excel_templates");
-  const files = await fs.readdir(templatesDir);
-  const db = getFirestore();
-  const aliases = {
-    nivel: "piso"
-  };
-
-  const schemaResults: Array<{ disciplina: string; fields: number }> = [];
-  const excelResults: Array<{ key: string; type: string }> = [];
-
-  for (const file of files) {
-    const match = file.match(/^(.*)_(Base|Reportes)_ES\.xlsx$/i);
-    if (!match) {
-      continue;
-    }
-
-    const [, disciplineLabel, templateType] = match;
-    const disciplina = toDisciplineKey(disciplineLabel);
-    const key = path.basename(file, ".xlsx");
-
-    await db
-      .collection("parametros_excels")
-      .doc(key)
-      .set(
-        {
-          key,
-          disciplina,
-          templateType: templateType.toLowerCase(),
-          fileName: file,
-          path: `assets/excel_templates/${file}`,
-          updatedAt: FieldValue.serverTimestamp()
-        },
-        { merge: true }
-      );
-    excelResults.push({ key, type: templateType.toLowerCase() });
-
-    if (templateType.toLowerCase() !== "base") {
-      continue;
-    }
-
-    const workbook = new ExcelJS.Workbook();
-    const filePath = path.join(templatesDir, file);
-    await workbook.xlsx.readFile(filePath);
-    const worksheet = workbook.worksheets[0];
-    const headerRow = worksheet?.getRow(1);
-    const fields: Array<{ key: string; displayName: string }> = [];
-
-    if (headerRow) {
-      headerRow.eachCell({ includeEmpty: false }, (cell) => {
-        const displayName = String(cell.text ?? cell.value ?? "").trim();
-        if (!displayName) {
-          return;
-        }
-        const keyName = toCamelCase(displayName);
-        if (!keyName) {
-          return;
-        }
-        fields.push({ key: keyName, displayName });
-      });
-    }
-
-    await db
-      .collection("parametros_schemas")
-      .doc(disciplina)
-      .set(
-        {
-          fields,
-          aliases,
-          updatedAt: FieldValue.serverTimestamp()
-        },
-        { merge: true }
-      );
-
-    schemaResults.push({ disciplina, fields: fields.length });
+export const generateParametros = functions.https.onRequest(async (req, res) => {
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
   }
 
-  res.json({
-    status: "ok",
-    schemas: schemaResults,
-    excels: excelResults
+  const disciplina = (req.query.disciplina as string | undefined)?.toLowerCase();
+  const tipo = (req.query.tipo as string | undefined)?.toLowerCase();
+
+  const templates = getTemplateDefinitions().filter((template) => {
+    if (disciplina && template.disciplina !== disciplina) {
+      return false;
+    }
+    if (tipo && template.tipo !== tipo) {
+      return false;
+    }
+    return true;
   });
+
+  if (templates.length === 0) {
+    res.status(400).json({ error: "No templates matched the request." });
+    return;
+  }
+
+  try {
+    const results: Array<{ key: string; filename: string }> = [];
+
+    for (const template of templates) {
+      const buffer =
+        template.tipo === "base"
+          ? await buildBaseWorkbookBuffer(template.disciplina, template.filename)
+          : await buildReportesWorkbookBuffer(template.filename);
+
+      const storagePath = await uploadWorkbook(template.filename, buffer);
+
+      await firestore.collection("parametros_excels").doc(`${template.disciplina}_${template.tipo}`).set(
+        {
+          key: `${template.disciplina}_${template.tipo}`,
+          disciplina: template.disciplina,
+          tipo: template.tipo,
+          filename: template.filename,
+          storagePath,
+          generatedAt: FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+
+      results.push({ key: `${template.disciplina}_${template.tipo}`, filename: template.filename });
+    }
+
+    res.status(200).json({ status: "ok", generated: results });
+  } catch (error) {
+    console.error("generateParametros failed", error);
+    res.status(500).json({ error: (error as Error).message });
+  }
 });
