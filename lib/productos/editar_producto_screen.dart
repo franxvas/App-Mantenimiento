@@ -173,8 +173,8 @@ Future<String?> _uploadToSupabase() async {
     }
 
     // 2. Actualizar el documento en Firestore
-    final disciplina = widget.initialData['disciplina'] ?? '';
-    final disciplinaKey = disciplina.toString().toLowerCase();
+    final disciplinaLabel = widget.initialData['disciplinaLabel'] ?? widget.initialData['disciplina'] ?? '';
+    final disciplinaKey = widget.initialData['disciplinaKey'] ?? disciplinaLabel.toString().toLowerCase();
     final schema = disciplinaKey.isNotEmpty ? await _schemaService.fetchSchema(disciplinaKey) : null;
     final attrs = _collectDynamicAttrs(schema?.fields ?? []);
     final topLevelValues = _extractTopLevel(attrs);
@@ -185,7 +185,9 @@ Future<String?> _uploadToSupabase() async {
       'estado': _estado,
       'estadoOperativo': _estado,
       'nivel': _nivelController.text,
-      'piso': _nivelController.text,
+      'disciplina': disciplinaLabel,
+      'disciplinaKey': disciplinaKey,
+      'disciplinaLabel': disciplinaLabel,
       'categoriaActivo': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'tipoActivo': _tipoActivoController.text.trim(),
       'bloque': _bloqueController.text.trim(),
@@ -202,7 +204,6 @@ Future<String?> _uploadToSupabase() async {
       ...topLevelValues,
       'ubicacion': {
         'nivel': _nivelController.text,
-        'piso': _nivelController.text,
         'bloque': _bloqueController.text.trim(),
         'area': _espacioController.text.trim(),
       },
@@ -217,7 +218,7 @@ Future<String?> _uploadToSupabase() async {
     await _datasetService.updateProductoWithDataset(
       productRef: productRef,
       productData: productData,
-      disciplina: disciplina,
+      disciplina: disciplinaLabel,
       columns: columns,
     );
 

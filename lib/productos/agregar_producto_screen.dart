@@ -119,19 +119,22 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
       // B. Guardar documento
       final schema = await _schemaService.fetchSchema(_disciplina.toLowerCase());
-      final aliases = schema?.aliases ?? {'nivel': 'piso'};
+      final aliases = schema?.aliases ?? {};
       final attrs = _collectDynamicAttrs(schema?.fields ?? []);
       final topLevelValues = _extractTopLevel(attrs);
       final nivelValue = _nivelCtrl.text;
 
       final productRef = FirebaseFirestore.instance.collection('productos').doc();
+      final disciplinaKey = _disciplina.toLowerCase();
+      final disciplinaLabel = _disciplina;
       final productData = {
         'nombre': _nombreCtrl.text,
         'descripcion': _descripcionCtrl.text,
         'categoria': _categoria,
         'categoriaActivo': _categoria,
-        'disciplina': _disciplina,
-        'disciplinaKey': _disciplina.toLowerCase(),
+        'disciplina': disciplinaLabel,
+        'disciplinaKey': disciplinaKey,
+        'disciplinaLabel': disciplinaLabel,
         'subcategoria': _subcategoria,
         'estado': _estado,
         'estadoOperativo': _estado,
@@ -139,7 +142,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'fechaCreacion': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'nivel': nivelValue,
-        'piso': nivelValue,
         'tipoActivo': _tipoActivoCtrl.text.trim(),
         'bloque': _bloqueCtrl.text.trim(),
         'espacio': _areaCtrl.text.trim(),
@@ -158,7 +160,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'ubicacion': {
           'bloque': _bloqueCtrl.text,
           'nivel': nivelValue,
-          'piso': nivelValue,
           'area': _areaCtrl.text,
         }
       };

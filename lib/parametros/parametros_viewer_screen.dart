@@ -1,13 +1,10 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../services/excel_row_mapper.dart';
 import '../services/excel_template_service.dart';
+import '../services/excel_export_service.dart';
 
 class ParametrosViewerScreen extends StatefulWidget {
   final String disciplinaKey;
@@ -65,6 +62,7 @@ class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
           if (widget.tipo == 'reportes') {
             return _ReportesViewer(
               disciplinaLabel: widget.disciplinaLabel,
+              disciplinaKey: widget.disciplinaKey,
               columns: columns,
               selectedProductId: _selectedProductId,
               onProductSelected: (productId) => setState(() => _selectedProductId = productId),
@@ -74,6 +72,7 @@ class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
 
           return _BaseViewer(
             disciplinaLabel: widget.disciplinaLabel,
+            disciplinaKey: widget.disciplinaKey,
             columns: columns,
             templateAssetPath: _templateAssetPath,
           );
@@ -85,22 +84,27 @@ class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
 
 class _BaseViewer extends StatelessWidget {
   final String disciplinaLabel;
+  final String disciplinaKey;
   final List<DatasetColumn> columns;
   final String templateAssetPath;
 
   const _BaseViewer({
     required this.disciplinaLabel,
+    required this.disciplinaKey,
     required this.columns,
     required this.templateAssetPath,
   });
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('productos')
-          .where('disciplina', isEqualTo: disciplinaLabel)
-          .snapshots(),
+    final productsRef = FirebaseFirestore.instance
+        .collection('productos')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: productsRef.snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -111,6 +115,13 @@ class _BaseViewer extends StatelessWidget {
         }
 
         final rows = snapshot.data!.docs
+            .where(
+              (doc) => _matchesDisciplina(
+                doc.data(),
+                disciplinaKey: disciplinaKey,
+                disciplinaLabel: disciplinaLabel,
+              ),
+            )
             .map((doc) => DatasetRow.fromBaseDocument(doc, columns))
             .toList()
           ..sort(DatasetRow.sortByNombre);
@@ -129,6 +140,7 @@ class _BaseViewer extends StatelessWidget {
 
 class _ReportesViewer extends StatelessWidget {
   final String disciplinaLabel;
+  final String disciplinaKey;
   final List<DatasetColumn> columns;
   final String? selectedProductId;
   final ValueChanged<String?> onProductSelected;
@@ -136,6 +148,7 @@ class _ReportesViewer extends StatelessWidget {
 
   const _ReportesViewer({
     required this.disciplinaLabel,
+    required this.disciplinaKey,
     required this.columns,
     required this.selectedProductId,
     required this.onProductSelected,
@@ -144,21 +157,35 @@ class _ReportesViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('productos')
-          .where('disciplina', isEqualTo: disciplinaLabel)
-          .snapshots(),
+    final productsRef = FirebaseFirestore.instance
+        .collection('productos')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: productsRef.snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (!snapshot.hasData) {
           return const Center(child: Text('No hay productos para reportes.'));
         }
 
-        final products = snapshot.data!.docs;
+        final products = snapshot.data!.docs
+            .where(
+              (doc) => _matchesDisciplina(
+                doc.data(),
+                disciplinaKey: disciplinaKey,
+                disciplinaLabel: disciplinaLabel,
+              ),
+            )
+            .toList();
+        if (products.isEmpty) {
+          return const Center(child: Text('No hay productos para reportes.'));
+        }
         final currentProductId = selectedProductId ?? products.first.id;
         final currentProductDoc = products.firstWhere((doc) => doc.id == currentProductId, orElse: () => products.first);
         if (currentProductId != selectedProductId) {
@@ -178,7 +205,7 @@ class _ReportesViewer extends StatelessWidget {
                     .map(
                       (doc) => DropdownMenuItem(
                         value: doc.id,
-                        child: Text(doc['nombre']?.toString() ?? doc.id),
+                        child: Text(doc.data()['nombre']?.toString() ?? doc.id),
                       ),
                     )
                     .toList(),
@@ -186,11 +213,14 @@ class _ReportesViewer extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('productos')
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: productsRef
                     .doc(currentProductId)
                     .collection('reportes')
+                    .withConverter<Map<String, dynamic>>(
+                      fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+                      toFirestore: (data, _) => data,
+                    )
                     .snapshots(),
                 builder: (context, reportSnapshot) {
                   if (reportSnapshot.connectionState == ConnectionState.waiting) {
@@ -205,7 +235,7 @@ class _ReportesViewer extends StatelessWidget {
                       .map(
                         (doc) => DatasetRow.fromReporteDocument(
                           doc,
-                          ProductRecord(id: currentProductId, data: currentProductDoc.data() as Map<String, dynamic>),
+                          ProductRecord(id: currentProductId, data: currentProductDoc.data()),
                           columns,
                         ),
                       )
@@ -309,12 +339,8 @@ class _ViewerContent extends StatelessWidget {
         throw Exception('No se pudo generar el archivo.');
       }
 
-      final directory = await getApplicationDocumentsDirectory();
       final filename = _buildFilename();
-      final file = File('${directory.path}/$filename');
-      await file.writeAsBytes(bytes, flush: true);
-
-      await OpenFilex.open(file.path);
+      await exportExcelFile(bytes, filename);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al generar Excel: $e')),
@@ -397,8 +423,11 @@ class DatasetRow {
     return idA.compareTo(idB);
   }
 
-  factory DatasetRow.fromBaseDocument(QueryDocumentSnapshot doc, List<DatasetColumn> columns) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory DatasetRow.fromBaseDocument(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    List<DatasetColumn> columns,
+  ) {
+    final data = doc.data();
     final values = <String, dynamic>{};
     values['nombre'] = data['nombre']?.toString() ?? '';
     final product = ProductRecord(id: doc.id, data: data);
@@ -411,11 +440,11 @@ class DatasetRow {
   }
 
   factory DatasetRow.fromReporteDocument(
-    QueryDocumentSnapshot doc,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
     ProductRecord product,
     List<DatasetColumn> columns,
   ) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data();
     final values = <String, dynamic>{};
     values['nombre'] = product.data['nombre']?.toString() ?? '';
     final report = ReportRecord(id: doc.id, data: data);
@@ -440,4 +469,20 @@ String? _findValueByNormalizedHeader(Map<String, dynamic> values, String target)
 String _buildTemplatePath(String disciplinaLabel, String tipo) {
   final tipoLabel = tipo == 'base' ? 'Base' : 'Reportes';
   return 'assets/excel_templates/${disciplinaLabel}_${tipoLabel}_ES.xlsx';
+}
+
+bool _matchesDisciplina(
+  Map<String, dynamic> data, {
+  required String disciplinaKey,
+  required String disciplinaLabel,
+}) {
+  final keyValue = data['disciplinaKey']?.toString().toLowerCase();
+  if (keyValue != null && keyValue.isNotEmpty) {
+    return keyValue == disciplinaKey.toLowerCase();
+  }
+  final labelValue = data['disciplinaLabel']?.toString() ?? data['disciplina']?.toString();
+  if (labelValue == null) {
+    return false;
+  }
+  return labelValue.toLowerCase() == disciplinaLabel.toLowerCase();
 }

@@ -78,7 +78,12 @@ class ListaProductosScreen extends StatelessWidget {
   // Helper para construir el Stream de Firestore según el estado
   Widget _buildProductStream(String estado, BuildContext context) {
     // 1. Construir la consulta base
-    Query query = FirebaseFirestore.instance.collection('productos');
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+        .collection('productos')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
     
     // 2. Aplicar el filtro dinámico (Disciplina o Categoría)
     if (filterBy == 'disciplina') {
@@ -90,7 +95,7 @@ class ListaProductosScreen extends StatelessWidget {
     // 3. Aplicar el filtro de estado (operativo / fuera de servicio)
     query = query.where('estado', isEqualTo: estado);
 
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: query.snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -114,7 +119,7 @@ class ListaProductosScreen extends StatelessWidget {
         // Renderizar la lista de tarjetas
         return Column(
           children: snapshot.data!.docs.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc.data();
             return _ProductCard(
               id: doc.id,
               nombre: data['nombre'] ?? 'Sin nombre',

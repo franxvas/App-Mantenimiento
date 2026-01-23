@@ -16,8 +16,14 @@ class ListaUsuariosScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF2C3E50),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('usuarios').snapshots(),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('usuarios')
+            .withConverter<Map<String, dynamic>>(
+              fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+              toFirestore: (data, _) => data,
+            )
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -41,8 +47,9 @@ class ListaUsuariosScreen extends StatelessWidget {
               childAspectRatio: 0.75, // Relación de aspecto (Alto vs Ancho) para que quepan los datos
             ),
             itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-              final userId = docs[index].id;
+              final doc = docs[index];
+              final data = doc.data();
+              final userId = doc.id;
               
               return _UserGridCard(data: data, userId: userId);
             },
