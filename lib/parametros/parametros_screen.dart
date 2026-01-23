@@ -168,3 +168,57 @@ class ParametrosDisciplinaScreen extends StatelessWidget {
     );
   }
 }
+
+class _DisciplinaCard extends StatelessWidget {
+  final DisciplinaOption option;
+  final void Function(String tipo) onOpenViewer;
+
+  const _DisciplinaCard({
+    required this.option,
+    required this.onOpenViewer,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(option.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => onOpenViewer('base'),
+                    icon: const Icon(Icons.table_view),
+                    label: const Text('Ver Base'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF3498DB),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => onOpenViewer('reportes'),
+                    icon: const Icon(Icons.description_outlined),
+                    label: const Text('Ver Reportes'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -357,7 +357,7 @@ class _ViewerContent extends StatelessWidget {
 
   CellValue? _cellValue(dynamic value) {
     if (value == null) {
-      return const TextCellValue('');
+      return TextCellValue('');
     }
     if (value is bool) {
       return BoolCellValue(value);
