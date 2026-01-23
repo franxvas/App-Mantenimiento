@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../services/parametros_schema_service.dart';
+import '../services/excel_row_mapper.dart';
+import '../services/excel_template_service.dart';
 
 class ParametrosViewerScreen extends StatefulWidget {
   final String disciplinaKey;
@@ -25,16 +26,15 @@ class ParametrosViewerScreen extends StatefulWidget {
 }
 
 class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
-  late final Future<void> _seedFuture;
-  final _schemaService = ParametrosSchemaService();
   String? _selectedProductId;
+  late final Future<ExcelTemplateLoadResult> _templateFuture;
 
-  String get _docId => '${widget.disciplinaKey}_${widget.tipo}';
+  String get _templateAssetPath => _buildTemplatePath(widget.disciplinaLabel, widget.tipo);
 
   @override
   void initState() {
     super.initState();
-    _seedFuture = _schemaService.seedSchemasIfMissing();
+    _templateFuture = const ExcelTemplateService().loadTemplate(_templateAssetPath);
   }
 
   @override
@@ -48,44 +48,34 @@ class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
         backgroundColor: const Color(0xFF2C3E50),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: FutureBuilder<void>(
-        future: _seedFuture,
+      body: FutureBuilder<ExcelTemplateLoadResult>(
+        future: _templateFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+          if (snapshot.hasError) {
+            return const Center(child: Text('No se pudo cargar la plantilla.'));
+          }
 
-          return StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance.collection('parametros_schemas').doc(_docId).snapshots(),
-            builder: (context, schemaSnapshot) {
-              if (schemaSnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          final template = snapshot.data;
+          final headers = template?.headers ?? [];
+          final columns = headers.asMap().entries.map((entry) => DatasetColumn.fromHeader(entry.value, entry.key)).toList();
 
-              if (!schemaSnapshot.hasData || !schemaSnapshot.data!.exists) {
-                return const Center(child: Text('No hay esquema disponible.'));
-              }
+          if (widget.tipo == 'reportes') {
+            return _ReportesViewer(
+              disciplinaLabel: widget.disciplinaLabel,
+              columns: columns,
+              selectedProductId: _selectedProductId,
+              onProductSelected: (productId) => setState(() => _selectedProductId = productId),
+              templateAssetPath: _templateAssetPath,
+            );
+          }
 
-              final schemaData = schemaSnapshot.data!.data() as Map<String, dynamic>;
-              final columns = (schemaData['columns'] as List<dynamic>? ?? [])
-                  .map((column) => DatasetColumn.fromMap(column as Map<String, dynamic>))
-                  .toList()
-                ..sort((a, b) => a.order.compareTo(b.order));
-
-              if (widget.tipo == 'reportes') {
-                return _ReportesViewer(
-                  disciplinaLabel: widget.disciplinaLabel,
-                  columns: columns,
-                  selectedProductId: _selectedProductId,
-                  onProductSelected: (productId) => setState(() => _selectedProductId = productId),
-                );
-              }
-
-              return _BaseViewer(
-                disciplinaLabel: widget.disciplinaLabel,
-                columns: columns,
-              );
-            },
+          return _BaseViewer(
+            disciplinaLabel: widget.disciplinaLabel,
+            columns: columns,
+            templateAssetPath: _templateAssetPath,
           );
         },
       ),
@@ -96,10 +86,12 @@ class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
 class _BaseViewer extends StatelessWidget {
   final String disciplinaLabel;
   final List<DatasetColumn> columns;
+  final String templateAssetPath;
 
   const _BaseViewer({
     required this.disciplinaLabel,
     required this.columns,
+    required this.templateAssetPath,
   });
 
   @override
@@ -128,6 +120,7 @@ class _BaseViewer extends StatelessWidget {
           rows: rows,
           disciplinaLabel: disciplinaLabel,
           tipo: 'base',
+          templateAssetPath: templateAssetPath,
         );
       },
     );
@@ -139,12 +132,14 @@ class _ReportesViewer extends StatelessWidget {
   final List<DatasetColumn> columns;
   final String? selectedProductId;
   final ValueChanged<String?> onProductSelected;
+  final String templateAssetPath;
 
   const _ReportesViewer({
     required this.disciplinaLabel,
     required this.columns,
     required this.selectedProductId,
     required this.onProductSelected,
+    required this.templateAssetPath,
   });
 
   @override
@@ -166,7 +161,6 @@ class _ReportesViewer extends StatelessWidget {
         final products = snapshot.data!.docs;
         final currentProductId = selectedProductId ?? products.first.id;
         final currentProductDoc = products.firstWhere((doc) => doc.id == currentProductId, orElse: () => products.first);
-        final productName = currentProductDoc['nombre']?.toString() ?? currentProductId;
         if (currentProductId != selectedProductId) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             onProductSelected(currentProductId);
@@ -208,8 +202,13 @@ class _ReportesViewer extends StatelessWidget {
                   }
 
                   final rows = reportSnapshot.data!.docs
-                      .map((doc) =>
-                          DatasetRow.fromReporteDocument(doc, currentProductId, disciplinaLabel, productName, columns))
+                      .map(
+                        (doc) => DatasetRow.fromReporteDocument(
+                          doc,
+                          ProductRecord(id: currentProductId, data: currentProductDoc.data() as Map<String, dynamic>),
+                          columns,
+                        ),
+                      )
                       .toList()
                     ..sort(DatasetRow.sortByNombre);
 
@@ -218,6 +217,7 @@ class _ReportesViewer extends StatelessWidget {
                     rows: rows,
                     disciplinaLabel: disciplinaLabel,
                     tipo: 'reportes',
+                    templateAssetPath: templateAssetPath,
                   );
                 },
               ),
@@ -234,12 +234,14 @@ class _ViewerContent extends StatelessWidget {
   final List<DatasetRow> rows;
   final String disciplinaLabel;
   final String tipo;
+  final String templateAssetPath;
 
   const _ViewerContent({
     required this.columns,
     required this.rows,
     required this.disciplinaLabel,
     required this.tipo,
+    required this.templateAssetPath,
   });
 
   @override
@@ -252,15 +254,15 @@ class _ViewerContent extends StatelessWidget {
               : SingleChildScrollView(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    child: DataTable(
+                      child: DataTable(
                       columns: columns
-                          .map((column) => DataColumn(label: Text(column.displayName)))
+                          .map((column) => DataColumn(label: Text(column.header)))
                           .toList(),
                       rows: rows
                           .map(
                             (row) => DataRow(
                               cells: columns
-                                  .map((column) => DataCell(Text(_stringify(row.values[column.key]))))
+                                  .map((column) => DataCell(Text(_stringify(row.values[column.header]))))
                                   .toList(),
                             ),
                           )
@@ -290,13 +292,15 @@ class _ViewerContent extends StatelessWidget {
 
   Future<void> _generateExcel(BuildContext context) async {
     try {
-      final excel = Excel.createExcel();
-      final sheet = excel['Parametros'];
+      final template = await const ExcelTemplateService().loadTemplate(templateAssetPath);
+      final excel = template.excel;
+      final sheet = template.sheet;
+      final headers = template.headers;
 
-      sheet.appendRow(columns.map((column) => _cellValue(column.displayName)).toList());
+      _clearDataRows(sheet);
 
       for (final row in rows) {
-        final rowValues = columns.map((column) => _cellValue(row.values[column.key])).toList();
+        final rowValues = headers.map((header) => _cellValue(row.values[header])).toList();
         sheet.appendRow(rowValues);
       }
 
@@ -315,6 +319,13 @@ class _ViewerContent extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al generar Excel: $e')),
       );
+    }
+  }
+
+  void _clearDataRows(Sheet sheet) {
+    final totalRows = sheet.maxRows;
+    for (var index = totalRows - 1; index >= 1; index--) {
+      sheet.removeRow(index);
     }
   }
 
@@ -349,21 +360,18 @@ class _ViewerContent extends StatelessWidget {
 }
 
 class DatasetColumn {
-  final String key;
-  final String displayName;
+  final String header;
   final int order;
 
   DatasetColumn({
-    required this.key,
-    required this.displayName,
+    required this.header,
     required this.order,
   });
 
-  factory DatasetColumn.fromMap(Map<String, dynamic> map) {
+  factory DatasetColumn.fromHeader(String header, int order) {
     return DatasetColumn(
-      key: map['key']?.toString() ?? '',
-      displayName: map['displayName']?.toString() ?? '',
-      order: map['order'] is int ? map['order'] as int : int.tryParse(map['order']?.toString() ?? '') ?? 0,
+      header: header,
+      order: order,
     );
   }
 }
@@ -380,40 +388,23 @@ class DatasetRow {
     if (nameCompare != 0) {
       return nameCompare;
     }
-    final idA = a.values['idActivo']?.toString() ?? a.values['idReporte']?.toString() ?? '';
-    final idB = b.values['idActivo']?.toString() ?? b.values['idReporte']?.toString() ?? '';
+    final idA = _findValueByNormalizedHeader(a.values, 'idactivo') ??
+        _findValueByNormalizedHeader(a.values, 'idreporte') ??
+        '';
+    final idB = _findValueByNormalizedHeader(b.values, 'idactivo') ??
+        _findValueByNormalizedHeader(b.values, 'idreporte') ??
+        '';
     return idA.compareTo(idB);
   }
 
   factory DatasetRow.fromBaseDocument(QueryDocumentSnapshot doc, List<DatasetColumn> columns) {
     final data = doc.data() as Map<String, dynamic>;
-    final ubicacion = data['ubicacion'] as Map<String, dynamic>? ?? {};
     final values = <String, dynamic>{};
     values['nombre'] = data['nombre']?.toString() ?? '';
-    final nivel = _resolveNivel(data);
+    final product = ProductRecord(id: doc.id, data: data);
 
     for (final column in columns) {
-      values[column.key] = switch (column.key) {
-        'idActivo' => doc.id,
-        'disciplina' => data['disciplina'],
-        'categoriaActivo' => data['categoriaActivo'] ?? data['categoria'],
-        'tipoActivo' => data['tipoActivo'],
-        'bloque' => data['bloque'] ?? ubicacion['bloque'],
-        'nivel' => nivel,
-        'espacio' => data['espacio'] ?? ubicacion['area'],
-        'estadoOperativo' => data['estadoOperativo'] ?? data['estado'],
-        'condicionFisica' => data['condicionFisica'],
-        'fechaUltimaInspeccion' => _formatTimestamp(data['fechaUltimaInspeccion']),
-        'nivelCriticidad' => data['nivelCriticidad'],
-        'impactoFalla' => data['impactoFalla'],
-        'riesgoNormativo' => data['riesgoNormativo'],
-        'frecuenciaMantenimientoMeses' => data['frecuenciaMantenimientoMeses'],
-        'fechaProximoMantenimiento' => _formatTimestamp(data['fechaProximoMantenimiento']),
-        'costoMantenimiento' => data['costoMantenimiento'],
-        'costoReemplazo' => data['costoReemplazo'],
-        'observaciones' => data['observaciones'],
-        _ => data[column.key],
-      };
+      values[column.header] = ExcelRowMapper.valueForHeader(column.header, product);
     }
 
     return DatasetRow(values: values);
@@ -421,45 +412,32 @@ class DatasetRow {
 
   factory DatasetRow.fromReporteDocument(
     QueryDocumentSnapshot doc,
-    String productId,
-    String disciplina,
-    String productName,
+    ProductRecord product,
     List<DatasetColumn> columns,
   ) {
     final data = doc.data() as Map<String, dynamic>;
     final values = <String, dynamic>{};
-    values['nombre'] = productName;
+    values['nombre'] = product.data['nombre']?.toString() ?? '';
+    final report = ReportRecord(id: doc.id, data: data);
 
     for (final column in columns) {
-      values[column.key] = switch (column.key) {
-        'idReporte' => doc.id,
-        'idActivo' => productId,
-        'disciplina' => disciplina,
-        'fechaInspeccion' => _formatTimestamp(data['fechaInspeccion']),
-        'estadoDetectado' => data['estadoDetectado'],
-        'riesgoElectrico' => data['riesgoElectrico'],
-        'accionRecomendada' => data['accionRecomendada'],
-        'costoEstimado' => data['costoEstimado'],
-        'responsable' => data['responsable'],
-        _ => data[column.key],
-      };
+      values[column.header] = ExcelRowMapper.valueForHeader(column.header, product, report: report);
     }
 
     return DatasetRow(values: values);
   }
 }
 
-String _resolveNivel(Map<String, dynamic> data) {
-  final ubicacion = data['ubicacion'] as Map<String, dynamic>? ?? {};
-  return (data['nivel'] ?? data['piso'] ?? ubicacion['nivel'] ?? ubicacion['piso'] ?? '').toString();
+String? _findValueByNormalizedHeader(Map<String, dynamic> values, String target) {
+  for (final entry in values.entries) {
+    if (ExcelRowMapper.normalizeHeader(entry.key) == target) {
+      return entry.value?.toString();
+    }
+  }
+  return null;
 }
 
-String _formatTimestamp(dynamic value) {
-  if (value is Timestamp) {
-    final date = value.toDate();
-    return '${date.year.toString().padLeft(4, '0')}'
-        '-${date.month.toString().padLeft(2, '0')}'
-        '-${date.day.toString().padLeft(2, '0')}';
-  }
-  return value?.toString() ?? '';
+String _buildTemplatePath(String disciplinaLabel, String tipo) {
+  final tipoLabel = tipo == 'base' ? 'Base' : 'Reportes';
+  return 'assets/excel_templates/${disciplinaLabel}_${tipoLabel}_ES.xlsx';
 }
