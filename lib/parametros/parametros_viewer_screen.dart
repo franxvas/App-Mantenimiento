@@ -439,5 +439,5 @@ String? _findValueByNormalizedHeader(Map<String, dynamic> values, String target)
 
 String _buildTemplatePath(String disciplinaLabel, String tipo) {
   final tipoLabel = tipo == 'base' ? 'Base' : 'Reportes';
-  return 'assets/excel_templates/${disciplinaLabel}_$tipoLabel_ES.xlsx';
+  return 'assets/excel_templates/${disciplinaLabel}_${tipoLabel}_ES.xlsx';
 }
