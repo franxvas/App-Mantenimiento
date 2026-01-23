@@ -16,9 +16,13 @@ class SeleccionarProductoReporteScreen extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 18),
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('productos')
+            .withConverter<Map<String, dynamic>>(
+              fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+              toFirestore: (data, _) => data,
+            )
             .where('categoria', isEqualTo: categoriaFilter)
             .snapshots(),
         builder: (context, snapshot) {
@@ -36,8 +40,9 @@ class SeleccionarProductoReporteScreen extends StatelessWidget {
             itemCount: docs.length,
             separatorBuilder: (_,__) => const Divider(),
             itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-              final productId = docs[index].id;
+              final doc = docs[index];
+              final data = doc.data();
+              final productId = doc.id;
               final String nombre = data['nombre'] ?? 'Sin nombre';
               final String estado = data['estado'] ?? 'desconocido';
               final String imageUrl = data['imagenUrl'] ?? '';

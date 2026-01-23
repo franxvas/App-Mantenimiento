@@ -44,23 +44,29 @@ class ExcelRowMapper {
       case 'nombre':
         return data['nombre'];
       case 'disciplina':
-        return data['disciplina'];
+        return _resolveDisciplina(data);
       case 'categoriaactivo':
+      case 'categoria':
         return data['categoriaActivo'] ?? data['categoria'];
       case 'tipoactivo':
-        return data['tipoActivo'];
+      case 'tipo':
+        return _resolveTipoActivo(data);
       case 'bloque':
         return data['bloque'] ?? ubicacion['bloque'];
       case 'nivel':
+      case 'piso':
         return _resolveNivel(data, ubicacion);
       case 'espacio':
-        return data['espacio'] ?? ubicacion['area'];
+      case 'area':
+      case 'oficina':
+        return _resolveEspacio(data, ubicacion);
       case 'estadooperativo':
+      case 'estado':
         return data['estadoOperativo'] ?? data['estado'];
       case 'condicionfisica':
         return data['condicionFisica'];
       case 'fechaultimainspeccion':
-        return _formatDate(data['fechaUltimaInspeccion']);
+        return _formatDate(reportData['fechaInspeccion'] ?? data['fechaUltimaInspeccion']);
       case 'nivelcriticidad':
         return data['nivelCriticidad'];
       case 'impactofalla':
@@ -76,11 +82,12 @@ class ExcelRowMapper {
       case 'costoreemplazo':
         return data['costoReemplazo'];
       case 'observaciones':
-        return data['observaciones'];
+        return data['observaciones'] ?? data['descripcion'];
       case 'idreporte':
         return report?.id;
       case 'fechainspeccion':
-        return _formatDate(reportData['fechaInspeccion']);
+      case 'fecha':
+        return _formatDate(reportData['fechaInspeccion'] ?? reportData['fecha']);
       case 'estadodetectado':
         return reportData['estadoDetectado'];
       case 'riesgoelectrico':
@@ -90,7 +97,7 @@ class ExcelRowMapper {
       case 'costoestimado':
         return reportData['costoEstimado'];
       case 'responsable':
-        return reportData['responsable'];
+        return reportData['responsable'] ?? reportData['encargado'];
       default:
         return data[header] ?? reportData[header];
     }
@@ -108,6 +115,31 @@ class ExcelRowMapper {
 
   static String _resolveNivel(Map<String, dynamic> data, Map<String, dynamic> ubicacion) {
     return (data['nivel'] ?? data['piso'] ?? ubicacion['nivel'] ?? ubicacion['piso'] ?? '').toString();
+  }
+
+  static String _resolveDisciplina(Map<String, dynamic> data) {
+    final raw = data['disciplina'] ??
+        data['disciplinaLabel'] ??
+        data['disciplinaKey'] ??
+        (data['attrs'] as Map<String, dynamic>?)?['disciplinaKey'] ??
+        (data['attrs'] as Map<String, dynamic>?)?['disciplina'];
+    final key = raw?.toString().toLowerCase() ?? '';
+    return _disciplinaLabels[key] ?? raw?.toString() ?? '';
+  }
+
+  static String _resolveTipoActivo(Map<String, dynamic> data) {
+    return data['tipoActivo']?.toString() ?? data['subcategoria']?.toString() ?? '';
+  }
+
+  static String _resolveEspacio(Map<String, dynamic> data, Map<String, dynamic> ubicacion) {
+    return (data['espacio'] ??
+            data['area'] ??
+            data['oficina'] ??
+            ubicacion['espacio'] ??
+            ubicacion['area'] ??
+            ubicacion['oficina'] ??
+            '')
+        .toString();
   }
 
   static String _formatDate(dynamic value) {
@@ -159,5 +191,12 @@ class ExcelRowMapper {
     'û': 'u',
     'ñ': 'n',
     'ç': 'c',
+  };
+
+  static const Map<String, String> _disciplinaLabels = {
+    'electricas': 'Electricas',
+    'arquitectura': 'Arquitectura',
+    'sanitarias': 'Sanitarias',
+    'estructuras': 'Estructuras',
   };
 }

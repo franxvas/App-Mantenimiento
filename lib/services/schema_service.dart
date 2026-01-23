@@ -42,6 +42,10 @@ class SchemaService {
   Stream<SchemaSnapshot?> streamSchema(String disciplina) {
     return _firestore
         .collection('parametros_schemas')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        )
         .doc(_schemaIdForDisciplina(disciplina))
         .snapshots()
         .map((doc) => _mapSnapshot(doc));
@@ -50,6 +54,10 @@ class SchemaService {
   Future<SchemaSnapshot?> fetchSchema(String disciplina) async {
     final doc = await _firestore
         .collection('parametros_schemas')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        )
         .doc(_schemaIdForDisciplina(disciplina))
         .get();
     return _mapSnapshot(doc);

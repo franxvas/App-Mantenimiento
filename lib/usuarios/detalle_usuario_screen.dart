@@ -13,6 +13,12 @@ class DetalleUsuarioScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // Obtener ID del usuario actual logueado
     final String currentAuthId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final usersRef = FirebaseFirestore.instance
+        .collection('usuarios')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -27,13 +33,13 @@ class DetalleUsuarioScreen extends StatelessWidget {
           }),
           
           // --- BOTÓN EDITAR (Con Lógica de Permisos) ---
-          StreamBuilder<DocumentSnapshot>(
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             // Escuchamos el perfil del usuario LOGUEADO para saber su rol
-            stream: FirebaseFirestore.instance.collection('usuarios').doc(currentAuthId).snapshots(),
+            stream: usersRef.doc(currentAuthId).snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) return Container(); // Cargando o error
               
-              final currentUserData = snapshot.data!.data() as Map<String, dynamic>?;
+              final currentUserData = snapshot.data!.data();
               final String myRole = currentUserData?['rol'] ?? 'user';
               
               // CONDICIÓN DE PERMISO:
@@ -45,15 +51,16 @@ class DetalleUsuarioScreen extends StatelessWidget {
               // ASUMIENDO BÚSQUEDA POR EMAIL PARA SEGURIDAD ROBUSTA SI LOS IDS NO COINCIDEN
               final String myEmail = FirebaseAuth.instance.currentUser?.email ?? '';
               
-              return FutureBuilder<QuerySnapshot>(
-                future: FirebaseFirestore.instance.collection('usuarios').where('email', isEqualTo: myEmail).get(),
-                builder: (context, AsyncSnapshot<QuerySnapshot> myProfileSnap) {
+              return FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                future: usersRef.where('email', isEqualTo: myEmail).get(),
+                builder: (context, AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> myProfileSnap) {
                    bool canEdit = false;
                    
                    if (myProfileSnap.hasData && myProfileSnap.data!.docs.isNotEmpty) {
-                      final myProfile = myProfileSnap.data!.docs.first.data() as Map<String, dynamic>;
+                      final myProfileDoc = myProfileSnap.data!.docs.first;
+                      final myProfile = myProfileDoc.data();
                       final String myRoleReal = myProfile['rol'] ?? 'user';
-                      final String myDocId = myProfileSnap.data!.docs.first.id;
+                      final String myDocId = myProfileDoc.id;
                       
                       // Si soy admin O si este perfil es el mío
                       if (myRoleReal == 'admin' || userId == myDocId) {
@@ -73,14 +80,15 @@ class DetalleUsuarioScreen extends StatelessWidget {
                          // O simplemente leerlos de nuevo en la pantalla de editar.
                          
                          // Vamos a leerlos aquí rápido para pasarlos:
-                         FirebaseFirestore.instance.collection('usuarios').doc(userId).get().then((doc) {
-                           if (doc.exists) {
+                         usersRef.doc(userId).get().then((doc) {
+                           final userData = doc.data();
+                           if (doc.exists && userData != null) {
                              Navigator.push(
                                context,
                                MaterialPageRoute(
                                  builder: (context) => EditarUsuarioScreen(
                                    userId: userId,
-                                   userData: doc.data() as Map<String, dynamic>,
+                                   userData: userData,
                                  ),
                                ),
                              );
@@ -97,8 +105,8 @@ class DetalleUsuarioScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance.collection('usuarios').doc(userId).get(),
+      body: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        future: usersRef.doc(userId).get(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -107,7 +115,7 @@ class DetalleUsuarioScreen extends StatelessWidget {
             return const Center(child: Text("Usuario no encontrado"));
           }
 
-          final user = snapshot.data!.data() as Map<String, dynamic>;
+          final user = snapshot.data!.data() ?? <String, dynamic>{};
 
           return SingleChildScrollView(
             child: Column(

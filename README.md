@@ -14,36 +14,17 @@ El Excel se genera localmente en el dispositivo usando Flutter.
 
 ## Flujo general
 - Firestore (`productos`) es la fuente de verdad.
-- La app **siembra esquemas** en `parametros_schemas` si no existen.
-- El visor lee `parametros_schemas` y consulta Firestore directamente para `productos` (Base) y `productos/{id}/reportes` (Reportes).
-- El Excel se genera en el dispositivo y se guarda en documentos locales.
+- La app **siembra esquemas** en `parametros_schemas` para formularios dinámicos, pero el visor usa **directamente** los headers de las plantillas Excel.
+- El visor consulta `productos` (Base) y `productos/{id}/reportes` (Reportes) directamente.
+- El Excel se genera en el dispositivo y se guarda en documentos locales (Web descarga archivo).
 
 ## Colecciones en Firestore
-
-### parametros_schemas
-Doc ID: `<disciplina>_<tipo>` (ej: `electricas_base`)
-
-```json
-{
-  "disciplina": "Electricas",
-  "disciplinaKey": "electricas",
-  "tipo": "base",
-  "filenameDefault": "Electricas_Base_ES.xlsx",
-  "columns": [
-    { "key": "idActivo", "displayName": "ID_Activo", "order": 0, "type": "text" },
-    { "key": "disciplina", "displayName": "Disciplina", "order": 1, "type": "text" },
-    { "key": "categoriaActivo", "displayName": "Categoria_Activo", "order": 2, "type": "text" }
-  ],
-  "aliases": { "nivel": "piso" },
-  "updatedAt": "<timestamp>"
-}
-```
 
 ### productos/{id}/reportes
 Subcolección de reportes por activo (se usa para el visor de Reportes).
 
 ## Sembrado de esquemas
-La app siembra automáticamente los 8 esquemas requeridos (4 disciplinas x base/reportes) si la colección está vacía.
+La app siembra automáticamente los 8 esquemas requeridos (4 disciplinas x base/reportes) si la colección está vacía. Esto solo afecta formularios dinámicos y validaciones, no el visor Excel.
 
 ## Mapeo de columnas (Excel → Firestore)
 El campo canónico de ubicación es **`nivel`**. Al leer, se hace fallback en este orden:
@@ -51,6 +32,8 @@ El campo canónico de ubicación es **`nivel`**. Al leer, se hace fallback en es
 2. `piso`
 3. `ubicacion.nivel`
 4. `ubicacion.piso`
+
+La disciplina se guarda en minúsculas como key (ej: `electricas`). El visor convierte esa key al label del template (Electricas, Arquitectura, etc.).
 
 ### Base (Electricas)
 - `ID_Activo`: `doc.id`
@@ -84,13 +67,20 @@ El campo canónico de ubicación es **`nivel`**. Al leer, se hace fallback en es
 - `Responsable`: `reporte.responsable`
 
 ## Generación de Excel (en dispositivo)
-Desde el visor, el botón **Generar Excel** crea el archivo `.xlsx` con:
+Desde el visor, el botón **Generar Excel** crea el archivo `.xlsx` usando la **plantilla real** de `assets/excel_templates/`:
 - Nombre con formato `Electricas_Base_yyyyMMdd.xlsx` o `Electricas_Reportes_yyyyMMdd.xlsx`.
-- Hoja "Parametros".
-- Header con `columns.displayName`.
-- Filas con los valores del dataset.
+- Encabezados tomados de la primera fila de la plantilla.
+- Filas nuevas reemplazando los datos existentes en el template.
 
-El archivo se guarda en el directorio de documentos local y se abre con `open_filex`.
+El archivo se guarda en el directorio de documentos local y se abre con `open_filex` (Web descarga archivo).
+
+## Añadir nuevas disciplinas o plantillas
+1. Agrega las plantillas en `assets/excel_templates/` con el formato:
+   - `<Disciplina>_Base_ES.xlsx`
+   - `<Disciplina>_Reportes_ES.xlsx`
+2. Asegura que `pubspec.yaml` incluya `assets/excel_templates/`.
+3. Registra la disciplina en `lib/parametros/parametros_screen.dart` con su `disciplinaKey` (lowercase) y `disciplinaLabel`.
+4. Los headers se leen de la plantilla; si agregas nuevas columnas, mapea los headers en `lib/services/excel_row_mapper.dart`.
 
 ## Nota importante
 Como no hay Functions ni triggers, los cambios se reflejan solo cuando la app crea/edita productos y reportes.

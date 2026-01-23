@@ -119,19 +119,18 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
       // B. Guardar documento
       final schema = await _schemaService.fetchSchema(_disciplina.toLowerCase());
-      final aliases = schema?.aliases ?? {'nivel': 'piso'};
       final attrs = _collectDynamicAttrs(schema?.fields ?? []);
       final topLevelValues = _extractTopLevel(attrs);
       final nivelValue = _nivelCtrl.text;
 
       final productRef = FirebaseFirestore.instance.collection('productos').doc();
+      final disciplinaKey = _disciplina.toLowerCase();
       final productData = {
         'nombre': _nombreCtrl.text,
         'descripcion': _descripcionCtrl.text,
         'categoria': _categoria,
         'categoriaActivo': _categoria,
-        'disciplina': _disciplina,
-        'disciplinaKey': _disciplina.toLowerCase(),
+        'disciplina': disciplinaKey,
         'subcategoria': _subcategoria,
         'estado': _estado,
         'estadoOperativo': _estado,
@@ -139,7 +138,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'fechaCreacion': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'nivel': nivelValue,
-        'piso': nivelValue,
         'tipoActivo': _tipoActivoCtrl.text.trim(),
         'bloque': _bloqueCtrl.text.trim(),
         'espacio': _areaCtrl.text.trim(),
@@ -151,14 +149,11 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'nivelCriticidad': _parseInt(_nivelCriticidadCtrl.text),
         'impactoFalla': _impactoFallaCtrl.text.trim(),
         'riesgoNormativo': _riesgoNormativoCtrl.text.trim(),
-        'attrs': attrs,
-        'aliases': aliases,
         ...topLevelValues,
         // Mapa de ubicación
         'ubicacion': {
           'bloque': _bloqueCtrl.text,
           'nivel': nivelValue,
-          'piso': nivelValue,
           'area': _areaCtrl.text,
         }
       };
