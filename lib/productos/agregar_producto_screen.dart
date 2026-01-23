@@ -29,14 +29,23 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
   // Ubicación
   final _bloqueCtrl = TextEditingController();
-  final _pisoCtrl = TextEditingController();
+  final _nivelCtrl = TextEditingController();
   final _areaCtrl = TextEditingController();
+  final _tipoActivoCtrl = TextEditingController();
+  final _condicionFisicaCtrl = TextEditingController();
+  final _frecuenciaMantenimientoCtrl = TextEditingController();
+  final _costoMantenimientoCtrl = TextEditingController();
+  final _costoReemplazoCtrl = TextEditingController();
+  final _observacionesCtrl = TextEditingController();
+  final _nivelCriticidadCtrl = TextEditingController();
+  final _impactoFallaCtrl = TextEditingController();
+  final _riesgoNormativoCtrl = TextEditingController();
 
   final Map<String, TextEditingController> _dynamicControllers = {};
 
   // Valores por defecto / Dropdowns
   String _categoria = 'luminarias';
-  String _disciplina = 'electricas';
+  String _disciplina = 'Electricas';
   String _subcategoria = 'luces_emergencia';
   String _estado = 'operativo';
   
@@ -48,8 +57,17 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     _nombreCtrl.dispose();
     _descripcionCtrl.dispose();
     _bloqueCtrl.dispose();
-    _pisoCtrl.dispose();
+    _nivelCtrl.dispose();
     _areaCtrl.dispose();
+    _tipoActivoCtrl.dispose();
+    _condicionFisicaCtrl.dispose();
+    _frecuenciaMantenimientoCtrl.dispose();
+    _costoMantenimientoCtrl.dispose();
+    _costoReemplazoCtrl.dispose();
+    _observacionesCtrl.dispose();
+    _nivelCriticidadCtrl.dispose();
+    _impactoFallaCtrl.dispose();
+    _riesgoNormativoCtrl.dispose();
     for (final controller in _dynamicControllers.values) {
       controller.dispose();
     }
@@ -105,37 +123,53 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       final String imageUrl = await _uploadImageToSupabase();
 
       // B. Guardar documento
-      final schema = await _schemaService.fetchSchema(_disciplina);
+      final schema = await _schemaService.fetchSchema(_disciplina.toLowerCase());
       final aliases = schema?.aliases ?? {'nivel': 'piso'};
       final attrs = _collectDynamicAttrs(schema?.fields ?? []);
       final topLevelValues = _extractTopLevel(attrs);
-      final pisoValue = _pisoCtrl.text;
+      final nivelValue = _nivelCtrl.text;
 
       final productRef = FirebaseFirestore.instance.collection('productos').doc();
       final productData = {
         'nombre': _nombreCtrl.text,
         'descripcion': _descripcionCtrl.text,
         'categoria': _categoria,
+        'categoriaActivo': _categoria,
         'disciplina': _disciplina,
+        'disciplinaKey': _disciplina.toLowerCase(),
         'subcategoria': _subcategoria,
         'estado': _estado,
+        'estadoOperativo': _estado,
         'fechaCompra': _fechaCompra, // Se guarda como Timestamp
         'fechaCreacion': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'imagenUrl': imageUrl,
-        'piso': pisoValue,
+        'nivel': nivelValue,
+        'piso': nivelValue,
+        'tipoActivo': _tipoActivoCtrl.text.trim(),
+        'bloque': _bloqueCtrl.text.trim(),
+        'espacio': _areaCtrl.text.trim(),
+        'condicionFisica': _condicionFisicaCtrl.text.trim(),
+        'frecuenciaMantenimientoMeses': _parseInt(_frecuenciaMantenimientoCtrl.text),
+        'costoMantenimiento': _parseDouble(_costoMantenimientoCtrl.text),
+        'costoReemplazo': _parseDouble(_costoReemplazoCtrl.text),
+        'observaciones': _observacionesCtrl.text.trim(),
+        'nivelCriticidad': _parseInt(_nivelCriticidadCtrl.text),
+        'impactoFalla': _impactoFallaCtrl.text.trim(),
+        'riesgoNormativo': _riesgoNormativoCtrl.text.trim(),
         'attrs': attrs,
         'aliases': aliases,
         ...topLevelValues,
         // Mapa de ubicación
         'ubicacion': {
           'bloque': _bloqueCtrl.text,
-          'piso': pisoValue,
+          'nivel': nivelValue,
+          'piso': nivelValue,
           'area': _areaCtrl.text,
         }
       };
 
-      final columns = await _parametrosSchemaService.fetchColumns(_disciplina, 'base');
+      final columns = await _parametrosSchemaService.fetchColumns(_disciplina.toLowerCase(), 'base');
       await _datasetService.createProductoWithDataset(
         productRef: productRef,
         productData: productData,
@@ -196,9 +230,9 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
               _buildTextField(_nombreCtrl, "Nombre del Equipo"),
               
               // Dropdowns simples para categorías (puedes hacerlos más complejos si quieres)
-              _buildDropdown("Disciplina", _disciplina, ['electricas', 'sanitarias', 'estructuras', 'arquitectura'], (v) => setState(() => _disciplina = v!)),
+              _buildDropdown("Disciplina", _disciplina, ['Electricas', 'Sanitarias', 'Estructuras', 'Arquitectura'], (v) => setState(() => _disciplina = v!)),
               _buildDropdown("Categoría", _categoria, ['luminarias', 'tableros', 'bombas', 'otros'], (v) => setState(() => _categoria = v!)),
-              _buildDropdown("Estado", _estado, ['operativo', 'fuera de servicio'], (v) => setState(() => _estado = v!)),
+              _buildDropdown("Estado Operativo", _estado, ['operativo', 'fuera de servicio'], (v) => setState(() => _estado = v!)),
               _buildTextField(null, "Subcategoría (Escribir manual)", isManual: true, onChanged: (val) => _subcategoria = val),
               
               const SizedBox(height: 20),
@@ -206,9 +240,22 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
               Row(children: [
                 Expanded(child: _buildTextField(_bloqueCtrl, "Bloque")),
                 const SizedBox(width: 10),
-                Expanded(child: _buildTextField(_pisoCtrl, "Piso")),
+                Expanded(child: _buildTextField(_nivelCtrl, "Nivel")),
               ]),
-              _buildTextField(_areaCtrl, "Área / Oficina"),
+              _buildTextField(_areaCtrl, "Espacio"),
+
+              const SizedBox(height: 20),
+              const Text("Parámetros Excel", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 10),
+              _buildTextField(_tipoActivoCtrl, "Tipo de Activo"),
+              _buildTextField(_condicionFisicaCtrl, "Condición Física"),
+              _buildTextField(_frecuenciaMantenimientoCtrl, "Frecuencia Mantenimiento (meses)", keyboardType: TextInputType.number),
+              _buildTextField(_costoMantenimientoCtrl, "Costo Mantenimiento", keyboardType: TextInputType.number),
+              _buildTextField(_costoReemplazoCtrl, "Costo Reemplazo", keyboardType: TextInputType.number),
+              _buildTextField(_observacionesCtrl, "Observaciones"),
+              _buildTextField(_nivelCriticidadCtrl, "Nivel de Criticidad", keyboardType: TextInputType.number),
+              _buildTextField(_impactoFallaCtrl, "Impacto de Falla"),
+              _buildTextField(_riesgoNormativoCtrl, "Riesgo Normativo"),
 
               const SizedBox(height: 20),
               ListTile(
@@ -288,16 +335,31 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
   List<Widget> _buildDynamicFields(List<SchemaField> fields) {
     final excluded = <String>{
+      'id',
+      'idActivo',
       'nombre',
       'estado',
       'piso',
+      'nivel',
       'bloque',
       'area',
+      'espacio',
       'disciplina',
       'categoria',
+      'categoriaActivo',
+      'tipoActivo',
       'subcategoria',
       'descripcion',
       'fechaCompra',
+      'estadoOperativo',
+      'condicionFisica',
+      'frecuenciaMantenimientoMeses',
+      'costoMantenimiento',
+      'costoReemplazo',
+      'observaciones',
+      'nivelCriticidad',
+      'impactoFalla',
+      'riesgoNormativo',
       'updatedAt',
       'imagenUrl',
     };
@@ -342,6 +404,22 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       attrs[field.key] = value;
     }
     return attrs;
+  }
+
+  int? _parseInt(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    return int.tryParse(trimmed);
+  }
+
+  double? _parseDouble(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    return double.tryParse(trimmed.replaceAll(',', '.'));
   }
 
   Map<String, dynamic> _extractTopLevel(Map<String, dynamic> attrs) {

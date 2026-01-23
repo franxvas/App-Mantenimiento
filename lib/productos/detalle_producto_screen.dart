@@ -51,9 +51,10 @@ class DetalleProductoScreen extends StatelessWidget {
                       try {
                         // Obtener los últimos 5 reportes para el PDF
                         final reportesQuery = await FirebaseFirestore.instance
+                            .collection('productos')
+                            .doc(productId)
                             .collection('reportes')
-                            .where('productId', isEqualTo: productId)
-                            .orderBy('fecha', descending: true)
+                            .orderBy('fechaInspeccion', descending: true)
                             .limit(5)
                             .get();
                         
@@ -185,7 +186,11 @@ class DetalleProductoScreen extends StatelessWidget {
                   content: Column(
                     children: [
                       _DetailRow(icon: FontAwesomeIcons.building, label: "Bloque", value: ubicacion['bloque'] ?? '--'),
-                      _DetailRow(icon: FontAwesomeIcons.layerGroup, label: "Piso", value: ubicacion['piso'] ?? data['piso'] ?? ubicacion['nivel'] ?? data['nivel'] ?? '--'),
+                      _DetailRow(
+                        icon: FontAwesomeIcons.layerGroup,
+                        label: "Nivel",
+                        value: data['nivel'] ?? data['piso'] ?? ubicacion['nivel'] ?? ubicacion['piso'] ?? '--',
+                      ),
                       _DetailRow(icon: FontAwesomeIcons.mapPin, label: "Área", value: ubicacion['area'] ?? '--'),
                     ],
                   ),
@@ -330,9 +335,10 @@ class DetalleProductoScreen extends StatelessWidget {
 
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
+                .collection('productos')
+                .doc(productId)
                 .collection('reportes')
-                .where('productId', isEqualTo: productId)
-                .orderBy('fecha', descending: true)
+                .orderBy('fechaInspeccion', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {

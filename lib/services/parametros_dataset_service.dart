@@ -139,7 +139,7 @@ class ParametrosDatasetService {
       'id': productId,
       'nombre': _stringify(productData['nombre']),
       'estado': _stringify(productData['estado']),
-      'piso': _stringify(productData['piso'] ?? ubicacion['piso'] ?? ubicacion['nivel'] ?? productData['nivel']),
+      'nivel': _stringify(productData['nivel'] ?? productData['piso'] ?? ubicacion['nivel'] ?? ubicacion['piso']),
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
@@ -167,7 +167,7 @@ class ParametrosDatasetService {
   static const Set<String> _directKeys = {
     'id',
     'nombre',
-    'piso',
+    'nivel',
     'estado',
   };
 }

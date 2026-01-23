@@ -3,7 +3,12 @@ import 'package:flutter/material.dart';
 import '../services/parametros_schema_service.dart';
 import 'parametros_viewer_screen.dart';
 
-typedef DisciplinaOption = ({String key, String label, bool enabled});
+typedef DisciplinaOption = ({
+  String key,
+  String label,
+  String disciplinaValue,
+  bool enabled
+});
 
 class ParametrosScreen extends StatefulWidget {
   const ParametrosScreen({super.key});
@@ -14,12 +19,12 @@ class ParametrosScreen extends StatefulWidget {
 
 class _ParametrosScreenState extends State<ParametrosScreen> {
   final List<DisciplinaOption> _options = const [
-    (key: 'electricas', label: 'Eléctricas', enabled: true),
-    (key: 'arquitectura', label: 'Arquitectura', enabled: true),
-    (key: 'sanitarias', label: 'Sanitarias', enabled: true),
-    (key: 'estructuras', label: 'Estructuras', enabled: true),
-    (key: 'mecanicas', label: 'Mecánicas', enabled: false),
-    (key: 'gas', label: 'Gas', enabled: false),
+    (key: 'electricas', label: 'Eléctricas', disciplinaValue: 'Electricas', enabled: true),
+    (key: 'arquitectura', label: 'Arquitectura', disciplinaValue: 'Arquitectura', enabled: true),
+    (key: 'sanitarias', label: 'Sanitarias', disciplinaValue: 'Sanitarias', enabled: true),
+    (key: 'estructuras', label: 'Estructuras', disciplinaValue: 'Estructuras', enabled: true),
+    (key: 'mecanicas', label: 'Mecánicas', disciplinaValue: 'Mecanicas', enabled: false),
+    (key: 'gas', label: 'Gas', disciplinaValue: 'Gas', enabled: false),
   ];
 
   late String _selectedDisciplina;
@@ -124,11 +129,13 @@ class _ParametrosScreenState extends State<ParametrosScreen> {
   }
 
   void _openViewer(BuildContext context, {required String tipo}) {
+    final disciplinaValue = _options.firstWhere((option) => option.key == _selectedDisciplina).disciplinaValue;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ParametrosViewerScreen(
-          disciplina: _selectedDisciplina,
+          disciplinaKey: _selectedDisciplina,
+          disciplinaLabel: disciplinaValue,
           tipo: tipo,
         ),
       ),

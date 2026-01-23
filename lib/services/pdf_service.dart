@@ -126,7 +126,7 @@ class PdfService {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     _infoRow("Bloque:", ubicacion['bloque']),
-                    _infoRow("Piso:", ubicacion['piso'] ?? ubicacion['nivel']),
+                    _infoRow("Nivel:", ubicacion['nivel'] ?? ubicacion['piso']),
                     _infoRow("Área:", ubicacion['area']), // Agregué Área también por si acaso
                   ]
                 )
@@ -285,7 +285,7 @@ class PdfService {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
               _infoRow("Bloque:", ubicacion['bloque']), 
-              _infoRow("Piso:", ubicacion['piso'] ?? ubicacion['nivel']),   
+              _infoRow("Nivel:", ubicacion['nivel'] ?? ubicacion['piso']),   
               _infoRow("Área:", ubicacion['area']),     
           ],
       );

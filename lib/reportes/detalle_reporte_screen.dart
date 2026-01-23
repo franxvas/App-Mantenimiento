@@ -30,11 +30,11 @@ class DetalleReporteScreen extends StatelessWidget {
         }
 
         final data = snapshot.data!.data() as Map<String, dynamic>;
-        final String estado = data['estado_nuevo'] ?? data['estado'] ?? 'Desconocido';
+        final String estado = data['estadoDetectado'] ?? data['estado_nuevo'] ?? data['estado'] ?? 'Desconocido';
         final bool isCompleted = estado.toLowerCase() == 'completado' || estado.toLowerCase() == 'operativo';
         
         // Manejo de Fechas
-        final Timestamp? tsFecha = data['fecha'];
+        final Timestamp? tsFecha = data['fechaInspeccion'] ?? data['fecha'];
         final String fechaDisplay = tsFecha != null
             ? DateFormat('dd/MM/yyyy - HH:mm').format(tsFecha.toDate())
             : '--/--/----';
@@ -187,7 +187,11 @@ class DetalleReporteScreen extends StatelessWidget {
           _DetailRow(icon: FontAwesomeIcons.tag, label: "Tipo de Reporte", value: data['tipo_reporte'] ?? 'General'),
           // Mostramos el Bloque correcto
           _DetailRow(icon: FontAwesomeIcons.building, label: "Bloque", value: ubicacion['bloque'] ?? '--'),
-          _DetailRow(icon: FontAwesomeIcons.layerGroup, label: "Piso", value: ubicacion['piso'] ?? ubicacion['nivel'] ?? '--'),
+          _DetailRow(
+            icon: FontAwesomeIcons.layerGroup,
+            label: "Nivel",
+            value: ubicacion['nivel'] ?? ubicacion['piso'] ?? '--',
+          ),
         ],
       ),
     );

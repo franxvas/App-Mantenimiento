@@ -27,23 +27,26 @@ class ParametrosSchemaColumn {
 }
 
 class ParametrosSchemaDefinition {
-  final String disciplina;
+  final String disciplinaKey;
+  final String disciplinaLabel;
   final String tipo;
   final String filenameDefault;
   final List<ParametrosSchemaColumn> columns;
 
   const ParametrosSchemaDefinition({
-    required this.disciplina,
+    required this.disciplinaKey,
+    required this.disciplinaLabel,
     required this.tipo,
     required this.filenameDefault,
     required this.columns,
   });
 
-  String get id => '${disciplina}_$tipo';
+  String get id => '${disciplinaKey}_$tipo';
 
   Map<String, dynamic> toMap() {
     return {
-      'disciplina': disciplina,
+      'disciplina': disciplinaLabel,
+      'disciplinaKey': disciplinaKey,
       'tipo': tipo,
       'filenameDefault': filenameDefault,
       'columns': columns.map((column) => column.toMap()).toList(),
@@ -84,7 +87,8 @@ class ParametrosSchemaService {
         batch.set(
           datasetRef,
           {
-            'disciplina': definition.disciplina,
+            'disciplina': definition.disciplinaLabel,
+            'disciplinaKey': definition.disciplinaKey,
             'tipo': definition.tipo,
             'schemaRef': schemaRef.path,
             'rowCount': 0,
@@ -131,66 +135,170 @@ class ParametrosSchemaService {
   static List<ParametrosSchemaDefinition> get _schemaDefinitions {
     const baseColumns = [
       ParametrosSchemaColumn(
-        key: 'id',
-        displayName: 'ID',
+        key: 'idActivo',
+        displayName: 'ID_Activo',
         order: 0,
         type: 'text',
         required: true,
       ),
       ParametrosSchemaColumn(
-        key: 'nombre',
-        displayName: 'Nombre',
+        key: 'disciplina',
+        displayName: 'Disciplina',
         order: 1,
         type: 'text',
-        required: true,
       ),
       ParametrosSchemaColumn(
-        key: 'piso',
-        displayName: 'Piso',
+        key: 'categoriaActivo',
+        displayName: 'Categoria_Activo',
         order: 2,
         type: 'text',
       ),
       ParametrosSchemaColumn(
-        key: 'estado',
-        displayName: 'Estado',
+        key: 'tipoActivo',
+        displayName: 'Tipo_Activo',
         order: 3,
-        type: 'text',
-      ),
-      ParametrosSchemaColumn(
-        key: 'categoria',
-        displayName: 'Categoría',
-        order: 4,
-        type: 'text',
-      ),
-      ParametrosSchemaColumn(
-        key: 'subcategoria',
-        displayName: 'Subcategoría',
-        order: 5,
-        type: 'text',
-      ),
-      ParametrosSchemaColumn(
-        key: 'descripcion',
-        displayName: 'Descripción',
-        order: 6,
         type: 'text',
       ),
       ParametrosSchemaColumn(
         key: 'bloque',
         displayName: 'Bloque',
+        order: 4,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'nivel',
+        displayName: 'Nivel',
+        order: 5,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'espacio',
+        displayName: 'Espacio',
+        order: 6,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'estadoOperativo',
+        displayName: 'Estado_Operativo',
         order: 7,
         type: 'text',
       ),
       ParametrosSchemaColumn(
-        key: 'area',
-        displayName: 'Área',
+        key: 'condicionFisica',
+        displayName: 'Condicion_Fisica',
         order: 8,
         type: 'text',
       ),
       ParametrosSchemaColumn(
-        key: 'fechaCompra',
-        displayName: 'Fecha de Compra',
+        key: 'fechaUltimaInspeccion',
+        displayName: 'Fecha_Ultima_Inspeccion',
         order: 9,
         type: 'date',
+      ),
+      ParametrosSchemaColumn(
+        key: 'nivelCriticidad',
+        displayName: 'Nivel_Criticidad',
+        order: 10,
+        type: 'number',
+      ),
+      ParametrosSchemaColumn(
+        key: 'impactoFalla',
+        displayName: 'Impacto_Falla',
+        order: 11,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'riesgoNormativo',
+        displayName: 'Riesgo_Normativo',
+        order: 12,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'frecuenciaMantenimientoMeses',
+        displayName: 'Frecuencia_Mantenimiento_Meses',
+        order: 13,
+        type: 'number',
+      ),
+      ParametrosSchemaColumn(
+        key: 'fechaProximoMantenimiento',
+        displayName: 'Fecha_Proximo_Mantenimiento',
+        order: 14,
+        type: 'date',
+      ),
+      ParametrosSchemaColumn(
+        key: 'costoMantenimiento',
+        displayName: 'Costo_Mantenimiento',
+        order: 15,
+        type: 'number',
+      ),
+      ParametrosSchemaColumn(
+        key: 'costoReemplazo',
+        displayName: 'Costo_Reemplazo',
+        order: 16,
+        type: 'number',
+      ),
+      ParametrosSchemaColumn(
+        key: 'observaciones',
+        displayName: 'Observaciones',
+        order: 17,
+        type: 'text',
+      ),
+    ];
+
+    const reportesColumns = [
+      ParametrosSchemaColumn(
+        key: 'idReporte',
+        displayName: 'ID_Reporte',
+        order: 0,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'idActivo',
+        displayName: 'ID_Activo',
+        order: 1,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'disciplina',
+        displayName: 'Disciplina',
+        order: 2,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'fechaInspeccion',
+        displayName: 'Fecha_Inspeccion',
+        order: 3,
+        type: 'date',
+      ),
+      ParametrosSchemaColumn(
+        key: 'estadoDetectado',
+        displayName: 'Estado_Detectado',
+        order: 4,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'riesgoElectrico',
+        displayName: 'Riesgo_Electrico',
+        order: 5,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'accionRecomendada',
+        displayName: 'Accion_Recomendada',
+        order: 6,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'costoEstimado',
+        displayName: 'Costo_Estimado',
+        order: 7,
+        type: 'number',
+      ),
+      ParametrosSchemaColumn(
+        key: 'responsable',
+        displayName: 'Responsable',
+        order: 8,
+        type: 'text',
       ),
     ];
 
@@ -205,16 +313,18 @@ class ParametrosSchemaService {
         .expand(
           (disciplina) => [
             ParametrosSchemaDefinition(
-              disciplina: disciplina,
+              disciplinaKey: disciplina,
+              disciplinaLabel: _labelFor(disciplina),
               tipo: 'base',
               filenameDefault: _filenameFor(disciplina, 'base'),
               columns: baseColumns,
             ),
             ParametrosSchemaDefinition(
-              disciplina: disciplina,
+              disciplinaKey: disciplina,
+              disciplinaLabel: _labelFor(disciplina),
               tipo: 'reportes',
               filenameDefault: _filenameFor(disciplina, 'reportes'),
-              columns: baseColumns,
+              columns: reportesColumns,
             ),
           ],
         )
@@ -222,8 +332,12 @@ class ParametrosSchemaService {
   }
 
   static String _filenameFor(String disciplina, String tipo) {
-    final label = disciplina[0].toUpperCase() + disciplina.substring(1);
+    final label = _labelFor(disciplina);
     final tipoLabel = tipo == 'base' ? 'Base' : 'Reportes';
     return '${label}_${tipoLabel}_ES.xlsx';
+  }
+
+  static String _labelFor(String disciplina) {
+    return disciplina[0].toUpperCase() + disciplina.substring(1);
   }
 }

@@ -32,10 +32,21 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
   final TextEditingController _descripcionCtrl = TextEditingController();
   final TextEditingController _comentariosCtrl = TextEditingController();
   final TextEditingController _encargadoCtrl = TextEditingController(); // Ya existía
+  final TextEditingController _estadoDetectadoCtrl = TextEditingController();
+  final TextEditingController _riesgoElectricoCtrl = TextEditingController();
+  final TextEditingController _accionRecomendadaCtrl = TextEditingController();
+  final TextEditingController _costoEstimadoCtrl = TextEditingController();
+  final TextEditingController _responsableCtrl = TextEditingController();
+  final TextEditingController _nivelCriticidadCtrl = TextEditingController();
+  final TextEditingController _impactoFallaCtrl = TextEditingController();
+  final TextEditingController _riesgoNormativoCtrl = TextEditingController();
+  final TextEditingController _condicionFisicaCtrl = TextEditingController();
   
   // Variables para Dropdowns/Selectores (estos sí se quedan como variables)
   String _nuevoEstado = 'OPERATIVO';
   String _reposicion = 'NO';
+
+  DateTime _fechaInspeccion = DateTime.now();
   
   bool _isSaving = false; 
 
@@ -52,6 +63,15 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     _descripcionCtrl.dispose();
     _comentariosCtrl.dispose();
     _encargadoCtrl.dispose();
+    _estadoDetectadoCtrl.dispose();
+    _riesgoElectricoCtrl.dispose();
+    _accionRecomendadaCtrl.dispose();
+    _costoEstimadoCtrl.dispose();
+    _responsableCtrl.dispose();
+    _nivelCriticidadCtrl.dispose();
+    _impactoFallaCtrl.dispose();
+    _riesgoNormativoCtrl.dispose();
+    _condicionFisicaCtrl.dispose();
     super.dispose();
   }
 
@@ -72,14 +92,28 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         if (querySnapshot.docs.isNotEmpty) {
           final userData = querySnapshot.docs.first.data();
           if (mounted) {
-            setState(() => _encargadoCtrl.text = userData['nombre'] ?? user.email ?? '');
+            final name = userData['nombre'] ?? user.email ?? '';
+            setState(() {
+              _encargadoCtrl.text = name;
+              _responsableCtrl.text = name;
+            });
           }
         } else {
-          if (mounted) setState(() => _encargadoCtrl.text = user.email ?? '');
+          if (mounted) {
+            setState(() {
+              _encargadoCtrl.text = user.email ?? '';
+              _responsableCtrl.text = user.email ?? '';
+            });
+          }
         }
       } catch (e) {
         print("Error obteniendo usuario: $e");
-        if (mounted) setState(() => _encargadoCtrl.text = user.email ?? '');
+        if (mounted) {
+          setState(() {
+            _encargadoCtrl.text = user.email ?? '';
+            _responsableCtrl.text = user.email ?? '';
+          });
+        }
       }
     }
   }
@@ -118,31 +152,48 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       final int nextReportNumber = await _getAndIncrementReportCounter();
       final String reportNumber = nextReportNumber.toString().padLeft(4, '0');
       
-      await FirebaseFirestore.instance.collection('reportes').add({
+      final fechaInspeccion = Timestamp.fromDate(_fechaInspeccion);
+
+      await FirebaseFirestore.instance
+          .collection('productos')
+          .doc(widget.productId)
+          .collection('reportes')
+          .add({
         'nro': reportNumber,
-        'productId': widget.productId,
-        'activo_nombre': widget.productName,
-        'categoria': widget.productCategory,
-        // --- 2. LEEMOS DIRECTAMENTE DEL CONTROLADOR (.text) ---
-        'tipo_reporte': _tipoReporteCtrl.text.trim(), 
+        'fechaInspeccion': fechaInspeccion,
+        'estadoDetectado': _estadoDetectadoCtrl.text.trim(),
+        'riesgoElectrico': _riesgoElectricoCtrl.text.trim(),
+        'accionRecomendada': _accionRecomendadaCtrl.text.trim(),
+        'costoEstimado': _parseDouble(_costoEstimadoCtrl.text),
+        'responsable': _responsableCtrl.text.trim(),
+        'tipoReporte': _tipoReporteCtrl.text.trim(),
         'descripcion': _descripcionCtrl.text.trim(),
-        'encargado': _encargadoCtrl.text.trim(),
         'comentarios': _comentariosCtrl.text.trim(),
-        // -----------------------------------------------------
-        'estado_anterior': widget.initialStatus,
-        'estado_nuevo': _nuevoEstado,
+        'estadoAnterior': widget.initialStatus,
+        'estadoNuevo': _nuevoEstado,
         'reposicion': _reposicion,
-        'fecha': FieldValue.serverTimestamp(),
-        'fechaDisplay': DateFormat('dd/MM/yyyy').format(DateTime.now()),
+        'fechaDisplay': DateFormat('dd/MM/yyyy').format(_fechaInspeccion),
         'ubicacion': widget.productLocation,
       });
 
-      if (_nuevoEstado.toLowerCase() != widget.initialStatus.toLowerCase()) {
-        await FirebaseFirestore.instance.collection('productos').doc(widget.productId).update({
-          'estado': _nuevoEstado.toLowerCase(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
+      final productRef = FirebaseFirestore.instance.collection('productos').doc(widget.productId);
+      final productSnap = await productRef.get();
+      final productData = productSnap.data() ?? {};
+      final frecuencia = productData['frecuenciaMantenimientoMeses'];
+      final meses = frecuencia is int ? frecuencia : int.tryParse(frecuencia?.toString() ?? '');
+      final fechaProximo = meses != null ? _addMonths(_fechaInspeccion, meses) : null;
+
+      await productRef.update({
+        'estado': _nuevoEstado.toLowerCase(),
+        'estadoOperativo': _nuevoEstado.toLowerCase(),
+        'condicionFisica': _condicionFisicaCtrl.text.trim(),
+        'fechaUltimaInspeccion': fechaInspeccion,
+        'fechaProximoMantenimiento': fechaProximo != null ? Timestamp.fromDate(fechaProximo) : null,
+        'nivelCriticidad': _parseInt(_nivelCriticidadCtrl.text),
+        'impactoFalla': _impactoFallaCtrl.text.trim(),
+        'riesgoNormativo': _riesgoNormativoCtrl.text.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
       if (mounted) {
         Navigator.of(context).pop(); 
@@ -191,9 +242,58 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             ),
             
             _buildReadOnlyField("Activo*", "${widget.productName}\n${widget.productCategory}"),
-            _buildReadOnlyField("Ubicación", "Bloque: ${widget.productLocation['bloque'] ?? '--'} - Piso: ${widget.productLocation['piso'] ?? widget.productLocation['nivel'] ?? '--'}"),
+            _buildReadOnlyField(
+              "Ubicación",
+              "Bloque: ${widget.productLocation['bloque'] ?? '--'} - Nivel: ${widget.productLocation['nivel'] ?? widget.productLocation['piso'] ?? '--'}",
+            ),
             _buildReadOnlyField("Categoría", widget.productCategory),
             _buildReadOnlyField("Estado Actual", widget.initialStatus),
+
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text("Fecha de Inspección"),
+              subtitle: Text(DateFormat('dd/MM/yyyy').format(_fechaInspeccion)),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _fechaInspeccion,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2101),
+                );
+                if (picked != null && mounted) {
+                  setState(() => _fechaInspeccion = picked);
+                }
+              },
+            ),
+
+            _buildTextField(
+              controller: _estadoDetectadoCtrl,
+              label: "Estado Detectado*",
+              hint: "EJ: Operativo con falla",
+            ),
+            _buildTextField(
+              controller: _riesgoElectricoCtrl,
+              label: "Riesgo Eléctrico*",
+              hint: "EJ: Alto",
+            ),
+            _buildTextField(
+              controller: _accionRecomendadaCtrl,
+              label: "Acción Recomendada*",
+              hint: "EJ: Reemplazar componente",
+            ),
+            _buildTextField(
+              controller: _costoEstimadoCtrl,
+              label: "Costo Estimado",
+              hint: "EJ: 1500",
+              keyboardType: TextInputType.number,
+            ),
+            _buildTextField(
+              controller: _responsableCtrl,
+              label: "Responsable",
+              hint: "Nombre del responsable",
+            ),
             
             _buildTextField(
               controller: _descripcionCtrl, // Asignamos controlador
@@ -214,6 +314,28 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               options: const ['NO', 'SI'],
               value: _reposicion,
               onChanged: (newValue) => setState(() => _reposicion = newValue),
+            ),
+
+            _buildTextField(
+              controller: _condicionFisicaCtrl,
+              label: "Condición Física",
+              hint: "EJ: Buena / Regular",
+            ),
+            _buildTextField(
+              controller: _nivelCriticidadCtrl,
+              label: "Nivel de Criticidad",
+              hint: "EJ: 3",
+              keyboardType: TextInputType.number,
+            ),
+            _buildTextField(
+              controller: _impactoFallaCtrl,
+              label: "Impacto de Falla",
+              hint: "EJ: Medio",
+            ),
+            _buildTextField(
+              controller: _riesgoNormativoCtrl,
+              label: "Riesgo Normativo",
+              hint: "EJ: Bajo",
             ),
 
             // Campo Encargado (Ya usaba controller, solo ajustamos el widget)
@@ -287,6 +409,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     required String hint, 
     int maxLines = 1, 
     bool isRequired = true,
+    TextInputType? keyboardType,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
@@ -299,6 +422,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
           contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         ),
         maxLines: maxLines,
+        keyboardType: keyboardType,
         validator: (value) {
           if (isRequired && (value == null || value.isEmpty)) {
             return 'Campo requerido';
@@ -331,6 +455,31 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         ],
       ),
     );
+  }
+
+  double? _parseDouble(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    return double.tryParse(trimmed.replaceAll(',', '.'));
+  }
+
+  int? _parseInt(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    return int.tryParse(trimmed);
+  }
+
+  DateTime _addMonths(DateTime date, int months) {
+    final newYear = date.year + ((date.month - 1 + months) ~/ 12);
+    final newMonth = ((date.month - 1 + months) % 12) + 1;
+    final day = date.day;
+    final lastDay = DateTime(newYear, newMonth + 1, 0).day;
+    final newDay = day > lastDay ? lastDay : day;
+    return DateTime(newYear, newMonth, newDay);
   }
 
   Widget _buildSegmentedControl({
