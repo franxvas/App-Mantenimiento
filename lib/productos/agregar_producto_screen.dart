@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'package:appmantflutter/services/parametros_dataset_service.dart';
+import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
 
 class AgregarProductoScreen extends StatefulWidget {
@@ -18,6 +20,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   bool _isUploading = false;
 
   final _schemaService = SchemaService();
+  final _parametrosSchemaService = ParametrosSchemaService();
+  final _datasetService = ParametrosDatasetService();
 
   // Controladores de texto
   final _nombreCtrl = TextEditingController();
@@ -50,6 +54,12 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _parametrosSchemaService.seedSchemasIfMissing();
   }
 
   // --- 1. SELECCIONAR IMAGEN ---
@@ -101,7 +111,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       final topLevelValues = _extractTopLevel(attrs);
       final pisoValue = _pisoCtrl.text;
 
-      await FirebaseFirestore.instance.collection('productos').add({
+      final productRef = FirebaseFirestore.instance.collection('productos').doc();
+      final productData = {
         'nombre': _nombreCtrl.text,
         'descripcion': _descripcionCtrl.text,
         'categoria': _categoria,
@@ -122,7 +133,15 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           'piso': pisoValue,
           'area': _areaCtrl.text,
         }
-      });
+      };
+
+      final columns = await _parametrosSchemaService.fetchColumns(_disciplina, 'base');
+      await _datasetService.createProductoWithDataset(
+        productRef: productRef,
+        productData: productData,
+        disciplina: _disciplina,
+        columns: columns,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Producto agregado correctamente")));

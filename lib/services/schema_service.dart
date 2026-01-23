@@ -42,13 +42,16 @@ class SchemaService {
   Stream<SchemaSnapshot?> streamSchema(String disciplina) {
     return _firestore
         .collection('parametros_schemas')
-        .doc(disciplina)
+        .doc(_schemaIdForDisciplina(disciplina))
         .snapshots()
         .map((doc) => _mapSnapshot(doc));
   }
 
   Future<SchemaSnapshot?> fetchSchema(String disciplina) async {
-    final doc = await _firestore.collection('parametros_schemas').doc(disciplina).get();
+    final doc = await _firestore
+        .collection('parametros_schemas')
+        .doc(_schemaIdForDisciplina(disciplina))
+        .get();
     return _mapSnapshot(doc);
   }
 
@@ -57,7 +60,7 @@ class SchemaService {
       return null;
     }
     final data = doc.data() ?? {};
-    final rawFields = (data['fields'] as List<dynamic>? ?? [])
+    final rawFields = (data['columns'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .map(SchemaField.fromMap)
         .toList();
@@ -69,5 +72,9 @@ class SchemaService {
 
   String resolveAlias(Map<String, String> aliases, String key) {
     return aliases[key] ?? key;
+  }
+
+  String _schemaIdForDisciplina(String disciplina) {
+    return '${disciplina}_base';
   }
 }

@@ -1,19 +1,40 @@
-import 'dart:io';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
 
-class ParametrosScreen extends StatelessWidget {
+import '../services/parametros_schema_service.dart';
+import 'parametros_viewer_screen.dart';
+
+typedef DisciplinaOption = ({String key, String label, bool enabled});
+
+class ParametrosScreen extends StatefulWidget {
   const ParametrosScreen({super.key});
 
   @override
+  State<ParametrosScreen> createState() => _ParametrosScreenState();
+}
+
+class _ParametrosScreenState extends State<ParametrosScreen> {
+  final List<DisciplinaOption> _options = const [
+    (key: 'electricas', label: 'Eléctricas', enabled: true),
+    (key: 'arquitectura', label: 'Arquitectura', enabled: true),
+    (key: 'sanitarias', label: 'Sanitarias', enabled: true),
+    (key: 'estructuras', label: 'Estructuras', enabled: true),
+    (key: 'mecanicas', label: 'Mecánicas', enabled: false),
+    (key: 'gas', label: 'Gas', enabled: false),
+  ];
+
+  late String _selectedDisciplina;
+  final _schemaService = ParametrosSchemaService();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDisciplina = _options.firstWhere((option) => option.enabled).key;
+    _schemaService.seedSchemasIfMissing();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final formatter = DateFormat('dd/MM/yyyy HH:mm');
+    final disabledOptions = _options.where((option) => !option.enabled).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -21,171 +42,95 @@ class ParametrosScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF2C3E50),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('parametros_excels')
-            .orderBy('disciplina')
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}"));
-          }
-
-          final docs = snapshot.data?.docs ?? [];
-          if (docs.isEmpty) {
-            return const Center(child: Text("No hay parámetros disponibles."));
-          }
-
-          final grouped = <String, List<QueryDocumentSnapshot>>{};
-          for (final doc in docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            final disciplina = data['disciplina'] ?? 'sin_disciplina';
-            grouped.putIfAbsent(disciplina, () => []).add(doc);
-          }
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: grouped.entries.map((entry) {
-              return Card(
-                margin: const EdgeInsets.only(bottom: 16),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.key.toString().toUpperCase(),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      const SizedBox(height: 12),
-                      ...(() {
-                        final sorted = [...entry.value];
-                        sorted.sort((a, b) {
-                          final dataA = a.data() as Map<String, dynamic>;
-                          final dataB = b.data() as Map<String, dynamic>;
-                          final tipoA = (dataA['tipo'] ?? '').toString();
-                          final tipoB = (dataB['tipo'] ?? '').toString();
-                          return tipoA.compareTo(tipoB);
-                        });
-                        return sorted;
-                      })().map((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        final filename = data['filename'] ?? doc.id;
-                        final tipo = data['tipo'] ?? '';
-                        final generatedAt = data['generatedAt'] as Timestamp?;
-                        final generatedLabel = generatedAt != null
-                            ? formatter.format(generatedAt.toDate())
-                            : 'Pendiente';
-                        return _ParametroItem(
-                          filename: filename,
-                          tipo: tipo,
-                          generatedAt: generatedLabel,
-                          storagePath: data['storagePath'],
-                          downloadUrl: data['downloadUrl'],
-                        );
-                      }),
-                    ],
-                  ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Disciplina',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _options
+                  .where((option) => option.enabled)
+                  .map((option) => ChoiceChip(
+                        label: Text(option.label),
+                        selected: _selectedDisciplina == option.key,
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedDisciplina = option.key;
+                          });
+                        },
+                      ))
+                  .toList(),
+            ),
+            if (disabledOptions.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Text(
+                'Próximamente',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: disabledOptions
+                    .map((option) => ChoiceChip(
+                          label: Text(option.label),
+                          selected: false,
+                          onSelected: null,
+                        ))
+                    .toList(),
+              ),
+            ],
+            const SizedBox(height: 24),
+            const Text(
+              'Acciones',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _openViewer(context, tipo: 'base'),
+                icon: const Icon(Icons.table_view),
+                label: const Text('Ver Base'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3498DB),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-              );
-            }).toList(),
-          );
-        },
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openViewer(context, tipo: 'reportes'),
+                icon: const Icon(Icons.description_outlined),
+                label: const Text('Ver Reportes'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
-}
 
-class _ParametroItem extends StatelessWidget {
-  final String filename;
-  final String tipo;
-  final String generatedAt;
-  final String? storagePath;
-  final String? downloadUrl;
-
-  const _ParametroItem({
-    required this.filename,
-    required this.tipo,
-    required this.generatedAt,
-    this.storagePath,
-    this.downloadUrl,
-  });
-
-  Future<void> _openOrDownload(BuildContext context, {required bool open}) async {
-    try {
-      final uri = await _resolveDownloadUrl();
-      if (uri == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Archivo pendiente de generación.")),
-        );
-        return;
-      }
-
-      final dir = await getTemporaryDirectory();
-      final filePath = "${dir.path}/$filename";
-      final file = File(filePath);
-      if (!await file.exists()) {
-        final bytes = await HttpClient().getUrl(Uri.parse(uri)).then((req) => req.close());
-        final data = await consolidateHttpClientResponseBytes(bytes);
-        await file.writeAsBytes(data, flush: true);
-      }
-
-      if (open) {
-        await OpenFilex.open(filePath);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Descargado en $filePath")),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al descargar: $e")),
-      );
-    }
-  }
-
-  Future<String?> _resolveDownloadUrl() async {
-    if (downloadUrl != null && downloadUrl!.isNotEmpty) {
-      return downloadUrl;
-    }
-    if (storagePath == null || storagePath!.isEmpty) {
-      return null;
-    }
-    final ref = FirebaseStorage.instance.ref(storagePath);
-    return ref.getDownloadURL();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("$filename (${tipo.toString().toUpperCase()})", style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text("Actualizado: $generatedAt", style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              ElevatedButton.icon(
-                onPressed: () => _openOrDownload(context, open: true),
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text("Abrir"),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3498DB)),
-              ),
-              const SizedBox(width: 10),
-              OutlinedButton.icon(
-                onPressed: () => _openOrDownload(context, open: false),
-                icon: const Icon(Icons.download, size: 16),
-                label: const Text("Descargar"),
-              ),
-            ],
-          ),
-        ],
+  void _openViewer(BuildContext context, {required String tipo}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ParametrosViewerScreen(
+          disciplina: _selectedDisciplina,
+          tipo: tipo,
+        ),
       ),
     );
   }

@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Importar Supabase
+import 'package:appmantflutter/services/parametros_dataset_service.dart';
+import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
 
 class EditarProductoScreen extends StatefulWidget {
@@ -22,6 +24,8 @@ class EditarProductoScreen extends StatefulWidget {
 class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final _formKey = GlobalKey<FormState>();
   final _schemaService = SchemaService();
+  final _parametrosSchemaService = ParametrosSchemaService();
+  final _datasetService = ParametrosDatasetService();
   
   // Controllers
   final _nombreController = TextEditingController();
@@ -45,6 +49,8 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _estado = widget.initialData['estado'] ?? 'operativo';
     // Asumimos que la base de datos guarda la URL COMPLETA ahora
     _currentImageUrl = widget.initialData['imagenUrl']; 
+
+    _parametrosSchemaService.seedSchemasIfMissing();
 
     final attrs = widget.initialData['attrs'] as Map<String, dynamic>? ?? {};
     for (final entry in attrs.entries) {
@@ -134,7 +140,7 @@ Future<String?> _uploadToSupabase() async {
     final attrs = _collectDynamicAttrs(schema?.fields ?? []);
     final topLevelValues = _extractTopLevel(attrs);
 
-    await FirebaseFirestore.instance.collection('productos').doc(widget.productId).update({
+    final productData = {
       'nombre': _nombreController.text,
       'descripcion': _descripcionController.text,
       'imagenUrl': newImageUrl, // Guardamos la nueva URL (o la anterior si no se subió nada)
@@ -148,7 +154,16 @@ Future<String?> _uploadToSupabase() async {
         'area': widget.initialData['ubicacion']?['area'] ?? '',
       },
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    };
+
+    final columns = await _parametrosSchemaService.fetchColumns(disciplina, 'base');
+    final productRef = FirebaseFirestore.instance.collection('productos').doc(widget.productId);
+    await _datasetService.updateProductoWithDataset(
+      productRef: productRef,
+      productData: productData,
+      disciplina: disciplina,
+      columns: columns,
+    );
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

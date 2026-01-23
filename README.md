@@ -2,136 +2,90 @@
 
 A new Flutter project.
 
-## Sincronización automática de productos a Excel (OneDrive)
+## Parámetros (Firestore + Flutter, sin Functions ni Storage)
 
-Este repo incluye una integración **backend-only** para reflejar cambios en Firestore hacia un Excel en OneDrive usando Microsoft Graph + Firebase Cloud Functions.
+Este repo implementa la experiencia de Parámetros **solo con Flutter + Firestore**:
 
-### Arquitectura
-- Firestore (fuente de verdad) → Cloud Functions (TypeScript) → Microsoft Graph → Excel (tabla).
-- El cliente Flutter **no** accede a Graph ni guarda secretos.
+- **No** se usa Cloud Functions.
+- **No** se usa Firebase Storage.
+- **No** se usa Microsoft Graph/OneDrive.
 
-### Requisitos en Azure
-1. **Azure App Registration** (cuenta propietaria del OneDrive).
-2. Permisos de Microsoft Graph (Application permissions):
-   - `Files.ReadWrite.All`
-   - `Sites.ReadWrite.All`
-   - `User.Read.All` (para acceso al drive del usuario, si usas UPN)
-3. Otorgar **Admin consent**.
+El Excel se genera localmente en el dispositivo usando Flutter.
 
-### Variables y secretos (Firebase Functions)
-Configura estas variables en Functions (NO en Flutter):
+## Flujo general
+- Firestore (`productos`) es la fuente de verdad.
+- La app **siembra esquemas** en `parametros_schemas` si no existen.
+- La app **mantiene datasets** en `parametros_datasets/<disciplina>_<tipo>/rows` en cada alta/edición/borrado.
+- El visor lee `parametros_schemas` y el subcollection `rows` para mostrar la tabla.
+- El Excel se genera en el dispositivo y se guarda en documentos locales.
 
-```bash
-firebase functions:config:set \\
-  GRAPH_TENANT_ID="your-tenant-id" \\
-  GRAPH_CLIENT_ID="your-client-id" \\
-  GRAPH_USER_ID="owner@contoso.com" \\
-  GRAPH_WORKBOOK_PATH="/Apps/InteriorMaintenance/Productos.xlsx" \\
-  GRAPH_PARAMETROS_FOLDER="/Apps/InteriorMaintenance/Parametros"
+## Colecciones en Firestore
 
-firebase functions:secrets:set GRAPH_CLIENT_SECRET
-```
+### parametros_schemas
+Doc ID: `<disciplina>_<tipo>` (ej: `electricas_base`)
 
-> También puedes usar `functions/.env.example` como guía local.
-
-#### Detalle de variables Graph
-| Variable | Descripción | Ejemplo |
-| --- | --- | --- |
-| `GRAPH_TENANT_ID` | ID del tenant de Entra ID (Azure AD). | `00000000-0000-0000-0000-000000000000` |
-| `GRAPH_CLIENT_ID` | Client ID de la App Registration. | `00000000-0000-0000-0000-000000000000` |
-| `GRAPH_CLIENT_SECRET` | Client secret (se gestiona como **secret**). | _(secrets:set)_ |
-| `GRAPH_USER_ID` | UPN o ID del usuario propietario del OneDrive. | `owner@contoso.com` |
-| `GRAPH_WORKBOOK_PATH` | Ruta del Excel en OneDrive. | `/Apps/InteriorMaintenance/Productos.xlsx` |
-| `GRAPH_PARAMETROS_FOLDER` | Carpeta en OneDrive donde se almacenan los archivos de parámetros/plantillas consumidos por Graph. | `/Apps/InteriorMaintenance/Parametros` |
-
-### Ejecutar `initSchemas`
-`initSchemas` es una función administrativa pensada para inicializar esquemas desde las plantillas locales (`functions/assets/excel_templates`). Para ejecutarla manualmente con la CLI:
-
-```bash
-curl -X POST https://<region>-<project-id>.cloudfunctions.net/initSchemas
-```
-
-Si necesitas ejecutarla en un entorno específico, asegúrate de usar el proyecto correcto con `firebase use <project-id>` antes de desplegar.
-
-### Migración `nivel` → `piso`
-Actualmente los documentos pueden traer el valor de ubicación como `ubicacion.nivel`, pero la salida hacia Excel utiliza `piso`. Para migrar datos existentes puedes ejecutar la función administrativa:
-
-```bash
-curl -X POST "https://<region>-<project-id>.cloudfunctions.net/migrateNivelToPiso?removeNivel=false"
-```
-
-Para eliminar el campo antiguo `nivel`, usa `removeNivel=true`.
-
-1. **Actualiza los clientes** para escribir `piso` (string/number) en el documento de `productos`.
-2. **Migra documentos existentes** copiando `ubicacion.nivel` → `piso`.
-3. **Depura el campo antiguo** (`ubicacion.nivel`) cuando todos los clientes ya lean/escriban `piso`.
-
-Ejemplo de script con Admin SDK (Node) para la migración manual:
-
-```ts
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-
-initializeApp();
-const db = getFirestore();
-
-const snapshot = await db.collection("productos").get();
-const batch = db.batch();
-
-snapshot.docs.forEach((doc) => {
-  const data = doc.data();
-  const nivel = data?.ubicacion?.nivel;
-  if (nivel !== undefined && data.piso === undefined) {
-    batch.update(doc.ref, { piso: String(nivel) });
-  }
-});
-
-await batch.commit();
-```
-
-### Despliegue de Functions
-```bash
-firebase deploy --only functions
-```
-
-Si también necesitas publicar reglas de Storage:
-
-```bash
-firebase deploy --only storage
-```
-
-### Reglas recomendadas de Storage (ajustar a tus roles)
-Ejemplo de reglas que requieren usuarios autenticados para lectura/escritura y permiten lectura pública opcional de plantillas:
-
-```js
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    // Plantillas/parametros (opcionalmente solo lectura autenticada)
-    match /parametros/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.token.admin == true;
-    }
-
-    // Por defecto: restringir a usuarios autenticados
-    match /{allPaths=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
+```json
+{
+  "disciplina": "electricas",
+  "tipo": "base",
+  "filenameDefault": "Electricas_Base_ES.xlsx",
+  "columns": [
+    { "key": "id", "displayName": "ID", "order": 0, "type": "text", "required": true },
+    { "key": "nombre", "displayName": "Nombre", "order": 1, "type": "text", "required": true },
+    { "key": "piso", "displayName": "Piso", "order": 2, "type": "text" },
+    { "key": "estado", "displayName": "Estado", "order": 3, "type": "text" }
+  ],
+  "aliases": { "nivel": "piso" },
+  "updatedAt": "<timestamp>"
 }
 ```
 
-### Despliegue
+### parametros_datasets
+Doc ID: `<disciplina>_<tipo>` (ej: `electricas_base`)
 
-```bash
-firebase deploy --only functions
+```json
+{
+  "disciplina": "electricas",
+  "tipo": "base",
+  "schemaRef": "parametros_schemas/electricas_base",
+  "rowCount": 12,
+  "updatedAt": "<timestamp>"
+}
 ```
 
-### Ruta del Excel
-Los archivos se crean/usan en:
+Subcollection de filas:
+`parametros_datasets/<disciplina>_<tipo>/rows/<rowId>`
 
-```
-/Apps/InteriorMaintenance/Parametros/
+```json
+{
+  "id": "<rowId>",
+  "nombre": "...",
+  "piso": "...",
+  "estado": "...",
+  "values": { "<key>": "<stringValue>" },
+  "updatedAt": "<timestamp>"
+}
 ```
 
-Las plantillas Base_*.xlsx definen el esquema (headers) y la app se adapta automáticamente a las columnas nuevas.
+## Sembrado de esquemas
+La app siembra automáticamente los 8 esquemas requeridos (4 disciplinas x base/reportes) si la colección está vacía.
+
+## Mapeo de columnas (producto → fila)
+- `id`: ID del documento de `productos`.
+- `nombre`: `producto.nombre`.
+- `piso`: `producto.piso` o `producto.ubicacion.nivel` o `producto.nivel`.
+- `estado`: `producto.estado`.
+- Otras columnas: `producto.attrs[key]` → `producto[key]` → vacío.
+
+## Generación de Excel (en dispositivo)
+Desde el visor, el botón **Generar Excel** crea el archivo `.xlsx` con:
+- Nombre exacto `filenameDefault` (por disciplina y tipo).
+- Hoja "Parametros".
+- Header con `columns.displayName`.
+- Filas con los valores del dataset.
+
+El archivo se guarda en el directorio de documentos local y se abre con `open_filex`.
+
+## Nota importante
+Como no hay Functions ni triggers, los datasets se actualizan **solo** cuando la app crea/edita/borra productos usando los servicios locales.
+Si se editan documentos directamente en Firestore fuera de la app, el dataset no se sincroniza automáticamente.
