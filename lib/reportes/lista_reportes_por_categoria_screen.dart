@@ -26,9 +26,13 @@ class ListaReportesPorCategoriaScreen extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('reportes')
+            .withConverter<Map<String, dynamic>>(
+              fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+              toFirestore: (data, _) => data,
+            )
             .where('categoria', isEqualTo: categoriaFilter) // Filtra reportes por categoría
             .orderBy('fecha', descending: true)
             .snapshots(),
@@ -58,7 +62,7 @@ class ListaReportesPorCategoriaScreen extends StatelessWidget {
             itemCount: docs.length,
             itemBuilder: (context, index) {
               final doc = docs[index];
-              final data = doc.data() as Map<String, dynamic>;
+              final data = doc.data();
               
               // Pasamos el ID del documento para poder navegar
               return _ReporteListCard(

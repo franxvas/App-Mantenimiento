@@ -45,6 +45,10 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       // 1. Buscar en Firestore el producto con ese 'codigoQR'
       final querySnapshot = await FirebaseFirestore.instance
           .collection('productos')
+          .withConverter<Map<String, dynamic>>(
+            fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+            toFirestore: (data, _) => data,
+          )
           .where('codigoQR', isEqualTo: code) // Filtra por el campo codigoQR
           .limit(1)
           .get();

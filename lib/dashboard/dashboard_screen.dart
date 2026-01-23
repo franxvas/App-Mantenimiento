@@ -28,10 +28,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _cargarDatos() async {
     try {
       final db = FirebaseFirestore.instance;
+      final productosRef = db.collection('productos').withConverter<Map<String, dynamic>>(
+            fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+            toFirestore: (data, _) => data,
+          );
+      final reportesRef = db.collection('reportes').withConverter<Map<String, dynamic>>(
+            fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+            toFirestore: (data, _) => data,
+          );
 
       // 1. CARGAR ESTADO DE EQUIPOS
-      final operativosSnapshot = await db.collection('productos').where('estado', isEqualTo: 'operativo').count().get();
-      final fallasSnapshot = await db.collection('productos').where('estado', isEqualTo: 'fuera de servicio').count().get();
+      final operativosSnapshot = await productosRef.where('estado', isEqualTo: 'operativo').count().get();
+      final fallasSnapshot = await productosRef.where('estado', isEqualTo: 'fuera de servicio').count().get();
 
       _totalOperativos = operativosSnapshot.count ?? 0;
       _totalFalla = fallasSnapshot.count ?? 0;
@@ -40,8 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final hoy = DateTime.now();
       final hace7dias = hoy.subtract(const Duration(days: 7));
       
-      final reportesSnapshot = await db
-          .collection('reportes')
+      final reportesSnapshot = await reportesRef
           .where('fecha', isGreaterThanOrEqualTo: hace7dias)
           .get();
 
