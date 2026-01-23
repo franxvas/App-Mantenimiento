@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
@@ -22,10 +24,7 @@ class ParametrosScreen extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('parametros_excels')
-            .orderBy('disciplina')
-            .snapshots(),
+        stream: FirebaseFirestore.instance.collection('parametros_excels').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -46,9 +45,12 @@ class ParametrosScreen extends StatelessWidget {
             grouped.putIfAbsent(disciplina, () => []).add(doc);
           }
 
+          final sortedKeys = grouped.keys.toList()..sort();
+
           return ListView(
             padding: const EdgeInsets.all(16),
-            children: grouped.entries.map((entry) {
+            children: sortedKeys.map((disciplina) {
+              final entryDocs = grouped[disciplina] ?? [];
               return Card(
                 margin: const EdgeInsets.only(bottom: 16),
                 child: Padding(
@@ -57,12 +59,12 @@ class ParametrosScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        entry.key.toString().toUpperCase(),
+                        disciplina.toString().toUpperCase(),
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       const SizedBox(height: 12),
                       ...(() {
-                        final sorted = [...entry.value];
+                        final sorted = [...entryDocs];
                         sorted.sort((a, b) {
                           final dataA = a.data() as Map<String, dynamic>;
                           final dataB = b.data() as Map<String, dynamic>;
@@ -75,6 +77,7 @@ class ParametrosScreen extends StatelessWidget {
                         final data = doc.data() as Map<String, dynamic>;
                         final filename = data['filename'] ?? doc.id;
                         final tipo = data['tipo'] ?? '';
+                        final disciplinaValue = data['disciplina'] ?? '';
                         final generatedAt = data['generatedAt'] as Timestamp?;
                         final generatedLabel = generatedAt != null
                             ? formatter.format(generatedAt.toDate())
@@ -82,9 +85,11 @@ class ParametrosScreen extends StatelessWidget {
                         return _ParametroItem(
                           filename: filename,
                           tipo: tipo,
+                          disciplina: disciplinaValue,
                           generatedAt: generatedLabel,
                           storagePath: data['storagePath'],
                           downloadUrl: data['downloadUrl'],
+                          isGenerated: generatedAt != null,
                         );
                       }),
                     ],
@@ -102,14 +107,18 @@ class ParametrosScreen extends StatelessWidget {
 class _ParametroItem extends StatelessWidget {
   final String filename;
   final String tipo;
+  final String disciplina;
   final String generatedAt;
   final String? storagePath;
   final String? downloadUrl;
+  final bool isGenerated;
 
   const _ParametroItem({
     required this.filename,
     required this.tipo,
+    required this.disciplina,
     required this.generatedAt,
+    required this.isGenerated,
     this.storagePath,
     this.downloadUrl,
   });
@@ -158,8 +167,43 @@ class _ParametroItem extends StatelessWidget {
     return ref.getDownloadURL();
   }
 
+  Future<void> _generateParametros(BuildContext context) async {
+    final projectId = Firebase.app().options.projectId;
+    if (projectId == null || projectId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No se pudo resolver el projectId.")),
+      );
+      return;
+    }
+
+    const region = 'us-central1';
+    final uri = Uri.parse(
+      'https://$region-$projectId.cloudfunctions.net/generateParametros'
+      '?disciplina=$disciplina&tipo=$tipo',
+    );
+
+    try {
+      final response = await http.get(uri);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Parámetro generado.")),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al generar: ${response.statusCode}")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al generar: $e")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final canDownload = storagePath != null && storagePath!.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -171,18 +215,28 @@ class _ParametroItem extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              ElevatedButton.icon(
-                onPressed: () => _openOrDownload(context, open: true),
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text("Abrir"),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3498DB)),
-              ),
-              const SizedBox(width: 10),
-              OutlinedButton.icon(
-                onPressed: () => _openOrDownload(context, open: false),
-                icon: const Icon(Icons.download, size: 16),
-                label: const Text("Descargar"),
-              ),
+              if (canDownload) ...[
+                ElevatedButton.icon(
+                  onPressed: () => _openOrDownload(context, open: true),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text("Abrir"),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3498DB)),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: () => _openOrDownload(context, open: false),
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text("Descargar"),
+                ),
+              ],
+              if (!isGenerated) ...[
+                if (canDownload) const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: () => _generateParametros(context),
+                  icon: const Icon(Icons.playlist_add_check, size: 16),
+                  label: const Text("Generar"),
+                ),
+              ],
             ],
           ),
         ],
