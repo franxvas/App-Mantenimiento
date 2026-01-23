@@ -64,10 +64,8 @@ class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
               }
 
               final schemaData = schemaSnapshot.data!.data() as Map<String, dynamic>;
-              final filename =
-                  schemaData['filenameDefault']?.toString() ?? '${widget.disciplina}_${widget.tipo}.xlsx';
               final columns = (schemaData['columns'] as List<dynamic>? ?? [])
-                  .map((column) => _SchemaColumn.fromMap(column as Map<String, dynamic>))
+                  .map((column) => DatasetColumn.fromMap(column as Map<String, dynamic>))
                   .toList()
                 ..sort((a, b) => a.order.compareTo(b.order));
 
@@ -87,14 +85,15 @@ class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
                   }
 
                   final rows = rowsSnapshot.data!.docs
-                      .map((doc) => _DatasetRow.fromMap(doc.data() as Map<String, dynamic>))
+                      .map((doc) => DatasetRow.fromMap(doc.data() as Map<String, dynamic>))
                       .toList()
-                    ..sort(_rowSorter);
+                    ..sort((a, b) => _rowSorter(a, b));
 
                   return _ViewerContent(
                     columns: columns,
                     rows: rows,
-                    filename: filename,
+                    disciplina: widget.disciplina,
+                    tipo: widget.tipo,
                   );
                 },
               );
@@ -105,26 +104,30 @@ class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
     );
   }
 
-  int _rowSorter(_DatasetRow a, _DatasetRow b) {
-    final nombreA = a.nombre.toLowerCase();
-    final nombreB = b.nombre.toLowerCase();
+  int _rowSorter(DatasetRow a, DatasetRow b) {
+    final nombreA = (a.values['nombre']?.toString() ?? '').toLowerCase();
+    final nombreB = (b.values['nombre']?.toString() ?? '').toLowerCase();
     final nameCompare = nombreA.compareTo(nombreB);
     if (nameCompare != 0) {
       return nameCompare;
     }
-    return a.id.compareTo(b.id);
+    final idA = a.values['id']?.toString() ?? '';
+    final idB = b.values['id']?.toString() ?? '';
+    return idA.compareTo(idB);
   }
 }
 
 class _ViewerContent extends StatelessWidget {
-  final List<_SchemaColumn> columns;
-  final List<_DatasetRow> rows;
-  final String filename;
+  final List<DatasetColumn> columns;
+  final List<DatasetRow> rows;
+  final String disciplina;
+  final String tipo;
 
   const _ViewerContent({
     required this.columns,
     required this.rows,
-    required this.filename,
+    required this.disciplina,
+    required this.tipo,
   });
 
   @override
@@ -145,7 +148,7 @@ class _ViewerContent extends StatelessWidget {
                           .map(
                             (row) => DataRow(
                               cells: columns
-                                  .map((column) => DataCell(Text(row.valueFor(column.key))))
+                                  .map((column) => DataCell(Text(_stringify(row.values[column.key]))))
                                   .toList(),
                             ),
                           )
@@ -181,7 +184,9 @@ class _ViewerContent extends StatelessWidget {
       sheet.appendRow(columns.map((column) => column.displayName).toList());
 
       for (final row in rows) {
-        final rowValues = columns.map((column) => row.valueFor(column.key)).toList();
+        final rowValues = columns
+            .map((column) => _cellValue(row.values[column.key]))
+            .toList();
         sheet.appendRow(rowValues);
       }
 
@@ -191,6 +196,7 @@ class _ViewerContent extends StatelessWidget {
       }
 
       final directory = await getApplicationDocumentsDirectory();
+      final filename = _buildFilename();
       final file = File('${directory.path}/$filename');
       await file.writeAsBytes(bytes, flush: true);
 
@@ -201,21 +207,47 @@ class _ViewerContent extends StatelessWidget {
       );
     }
   }
+
+  dynamic _cellValue(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+    if (value is num || value is bool) {
+      return value;
+    }
+    return value.toString();
+  }
+
+  String _buildFilename() {
+    final now = DateTime.now();
+    final date = '${now.year.toString().padLeft(4, '0')}'
+        '${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}';
+    final tipoLabel = tipo.toUpperCase();
+    return '${disciplina}_${tipoLabel}_$date.xlsx';
+  }
+
+  String _stringify(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+    return value.toString();
+  }
 }
 
-class _SchemaColumn {
+class DatasetColumn {
   final String key;
   final String displayName;
   final int order;
 
-  _SchemaColumn({
+  DatasetColumn({
     required this.key,
     required this.displayName,
     required this.order,
   });
 
-  factory _SchemaColumn.fromMap(Map<String, dynamic> map) {
-    return _SchemaColumn(
+  factory DatasetColumn.fromMap(Map<String, dynamic> map) {
+    return DatasetColumn(
       key: map['key']?.toString() ?? '',
       displayName: map['displayName']?.toString() ?? '',
       order: map['order'] is int ? map['order'] as int : int.tryParse(map['order']?.toString() ?? '') ?? 0,
@@ -223,43 +255,19 @@ class _SchemaColumn {
   }
 }
 
-class _DatasetRow {
-  final String id;
-  final String nombre;
-  final String piso;
-  final String estado;
+class DatasetRow {
   final Map<String, dynamic> values;
 
-  _DatasetRow({
-    required this.id,
-    required this.nombre,
-    required this.piso,
-    required this.estado,
-    required this.values,
-  });
+  DatasetRow({required this.values});
 
-  factory _DatasetRow.fromMap(Map<String, dynamic> map) {
-    return _DatasetRow(
-      id: map['id']?.toString() ?? '',
-      nombre: map['nombre']?.toString() ?? '',
-      piso: map['piso']?.toString() ?? '',
-      estado: map['estado']?.toString() ?? '',
-      values: Map<String, dynamic>.from(map['values'] as Map? ?? {}),
-    );
-  }
-
-  String valueFor(String key) {
-    switch (key) {
-      case 'id':
-        return id;
-      case 'nombre':
-        return nombre;
-      case 'piso':
-        return piso;
-      case 'estado':
-        return estado;
-      default:
-        return values[key]?.toString() ?? '';
-    }
+  factory DatasetRow.fromMap(Map<String, dynamic> map) {
+    final values = <String, dynamic>{};
+    values['id'] = map['id'];
+    values['nombre'] = map['nombre'];
+    values['piso'] = map['piso'];
+    values['estado'] = map['estado'];
+    final extras = Map<String, dynamic>.from(map['values'] as Map? ?? {});
+    values.addAll(extras);
+    return DatasetRow(values: values);
   }
 }
