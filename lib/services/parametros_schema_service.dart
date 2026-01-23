@@ -50,7 +50,7 @@ class ParametrosSchemaDefinition {
       'tipo': tipo,
       'filenameDefault': filenameDefault,
       'columns': columns.map((column) => column.toMap()).toList(),
-      'aliases': {'nivel': 'piso'},
+      'aliases': {},
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -72,16 +72,24 @@ class ParametrosSchemaService {
     final definitions = _schemaDefinitions;
     bool hasChanges = false;
     final batch = _firestore.batch();
+    final schemasRef = _firestore.collection('parametros_schemas').withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
+    final datasetsRef = _firestore.collection('parametros_datasets').withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
 
     for (final definition in definitions) {
-      final schemaRef = _firestore.collection('parametros_schemas').doc(definition.id);
+      final schemaRef = schemasRef.doc(definition.id);
       final schemaSnap = await schemaRef.get();
       if (!schemaSnap.exists) {
         batch.set(schemaRef, definition.toMap());
         hasChanges = true;
       }
 
-      final datasetRef = _firestore.collection('parametros_datasets').doc(definition.id);
+      final datasetRef = datasetsRef.doc(definition.id);
       final datasetSnap = await datasetRef.get();
       if (!datasetSnap.exists) {
         batch.set(
@@ -107,7 +115,14 @@ class ParametrosSchemaService {
   }
 
   Future<DocumentSnapshot<Map<String, dynamic>>> getSchema(String disciplina, String tipo) {
-    return _firestore.collection('parametros_schemas').doc('${disciplina}_$tipo').get();
+    return _firestore
+        .collection('parametros_schemas')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        )
+        .doc('${disciplina}_$tipo')
+        .get();
   }
 
   Future<List<ParametrosSchemaColumn>> fetchColumns(String disciplina, String tipo) async {

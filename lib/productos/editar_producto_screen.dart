@@ -185,7 +185,6 @@ Future<String?> _uploadToSupabase() async {
       'estado': _estado,
       'estadoOperativo': _estado,
       'nivel': _nivelController.text,
-      'piso': _nivelController.text,
       'categoriaActivo': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'tipoActivo': _tipoActivoController.text.trim(),
       'bloque': _bloqueController.text.trim(),
@@ -202,7 +201,6 @@ Future<String?> _uploadToSupabase() async {
       ...topLevelValues,
       'ubicacion': {
         'nivel': _nivelController.text,
-        'piso': _nivelController.text,
         'bloque': _bloqueController.text.trim(),
         'area': _espacioController.text.trim(),
       },

@@ -85,6 +85,10 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       try {
         final querySnapshot = await FirebaseFirestore.instance
             .collection('usuarios')
+            .withConverter<Map<String, dynamic>>(
+              fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+              toFirestore: (data, _) => data,
+            )
             .where('email', isEqualTo: user.email)
             .limit(1)
             .get();
@@ -120,13 +124,19 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
 
   // --- FUNCIÓN DE CONTADOR ATÓMICO ---
   Future<int> _getAndIncrementReportCounter() async {
-    final counterRef = FirebaseFirestore.instance.collection('metadata').doc('counters');
+    final counterRef = FirebaseFirestore.instance
+        .collection('metadata')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        )
+        .doc('counters');
 
     return FirebaseFirestore.instance.runTransaction((transaction) async {
       final snapshot = await transaction.get(counterRef);
       int currentNumber;
 
-      if (!snapshot.exists || snapshot.data() == null || snapshot.data()!['report_nro'] == null) {
+      if (!snapshot.exists || snapshot.data()?['report_nro'] == null) {
         currentNumber = 1; 
       } else {
         currentNumber = (snapshot.data()!['report_nro'] as int) + 1;
@@ -154,10 +164,20 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       
       final fechaInspeccion = Timestamp.fromDate(_fechaInspeccion);
 
-      await FirebaseFirestore.instance
+      final productsRef = FirebaseFirestore.instance
           .collection('productos')
+          .withConverter<Map<String, dynamic>>(
+            fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+            toFirestore: (data, _) => data,
+          );
+
+      await productsRef
           .doc(widget.productId)
           .collection('reportes')
+          .withConverter<Map<String, dynamic>>(
+            fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+            toFirestore: (data, _) => data,
+          )
           .add({
         'nro': reportNumber,
         'fechaInspeccion': fechaInspeccion,
@@ -176,7 +196,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         'ubicacion': widget.productLocation,
       });
 
-      final productRef = FirebaseFirestore.instance.collection('productos').doc(widget.productId);
+      final productRef = productsRef.doc(widget.productId);
       final productSnap = await productRef.get();
       final productData = productSnap.data() ?? {};
       final frecuencia = productData['frecuenciaMantenimientoMeses'];

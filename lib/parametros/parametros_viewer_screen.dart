@@ -1,13 +1,10 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../services/excel_row_mapper.dart';
 import '../services/excel_template_service.dart';
+import '../services/excel_export_service.dart';
 
 class ParametrosViewerScreen extends StatefulWidget {
   final String disciplinaKey;
@@ -96,11 +93,14 @@ class _BaseViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('productos')
-          .where('disciplina', isEqualTo: disciplinaLabel)
-          .snapshots(),
+    final productsRef = FirebaseFirestore.instance
+        .collection('productos')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: productsRef.where('disciplina', isEqualTo: disciplinaLabel).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -144,11 +144,14 @@ class _ReportesViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('productos')
-          .where('disciplina', isEqualTo: disciplinaLabel)
-          .snapshots(),
+    final productsRef = FirebaseFirestore.instance
+        .collection('productos')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: productsRef.where('disciplina', isEqualTo: disciplinaLabel).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -186,11 +189,14 @@ class _ReportesViewer extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('productos')
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: productsRef
                     .doc(currentProductId)
                     .collection('reportes')
+                    .withConverter<Map<String, dynamic>>(
+                      fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+                      toFirestore: (data, _) => data,
+                    )
                     .snapshots(),
                 builder: (context, reportSnapshot) {
                   if (reportSnapshot.connectionState == ConnectionState.waiting) {
@@ -205,7 +211,7 @@ class _ReportesViewer extends StatelessWidget {
                       .map(
                         (doc) => DatasetRow.fromReporteDocument(
                           doc,
-                          ProductRecord(id: currentProductId, data: currentProductDoc.data() as Map<String, dynamic>),
+                          ProductRecord(id: currentProductId, data: currentProductDoc.data()),
                           columns,
                         ),
                       )
@@ -309,12 +315,8 @@ class _ViewerContent extends StatelessWidget {
         throw Exception('No se pudo generar el archivo.');
       }
 
-      final directory = await getApplicationDocumentsDirectory();
       final filename = _buildFilename();
-      final file = File('${directory.path}/$filename');
-      await file.writeAsBytes(bytes, flush: true);
-
-      await OpenFilex.open(file.path);
+      await exportExcelFile(bytes, filename);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al generar Excel: $e')),
@@ -397,8 +399,11 @@ class DatasetRow {
     return idA.compareTo(idB);
   }
 
-  factory DatasetRow.fromBaseDocument(QueryDocumentSnapshot doc, List<DatasetColumn> columns) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory DatasetRow.fromBaseDocument(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    List<DatasetColumn> columns,
+  ) {
+    final data = doc.data();
     final values = <String, dynamic>{};
     values['nombre'] = data['nombre']?.toString() ?? '';
     final product = ProductRecord(id: doc.id, data: data);
@@ -411,11 +416,11 @@ class DatasetRow {
   }
 
   factory DatasetRow.fromReporteDocument(
-    QueryDocumentSnapshot doc,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
     ProductRecord product,
     List<DatasetColumn> columns,
   ) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data();
     final values = <String, dynamic>{};
     values['nombre'] = product.data['nombre']?.toString() ?? '';
     final report = ReportRecord(id: doc.id, data: data);
