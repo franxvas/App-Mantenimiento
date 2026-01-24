@@ -281,7 +281,7 @@ class DetalleProductoScreen extends StatelessWidget {
                   },
                   errorBuilder: (context, error, stackTrace) => Center(child: Icon(Icons.broken_image, size: 60, color: Colors.grey[400])),
                 )
-              : Center(child: Icon(Icons.image_not_supported, size: 60, color: Colors.grey[300])),
+              : const Center(child: Text('Sin foto', style: TextStyle(color: Colors.grey))),
         ),
         Container(
           padding: const EdgeInsets.all(20),
@@ -402,6 +402,7 @@ List<Widget> _buildDynamicDetails(
   Map<String, dynamic> attrs,
 ) {
   const excluded = <String>{
+    'idActivo',
     'nombre',
     'estado',
     'piso',
