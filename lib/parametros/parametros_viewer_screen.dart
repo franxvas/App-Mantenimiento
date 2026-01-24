@@ -244,7 +244,6 @@ class _ViewerContent extends StatelessWidget {
                       ),
                     )
                     .toList(),
-                  ),
               ),
             ),
           ),
