@@ -198,7 +198,12 @@ class _ProductCard extends StatelessWidget {
                               return const Center(child: CircularProgressIndicator(strokeWidth: 2));
                             },
                           )
-                        : const Icon(Icons.image, color: Colors.grey), // Icono por defecto
+                        : const Center(
+                            child: Text(
+                              'Sin foto',
+                              style: TextStyle(color: Colors.grey, fontSize: 12),
+                            ),
+                          ), // Texto por defecto
                   ),
                 ),
                 

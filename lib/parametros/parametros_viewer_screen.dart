@@ -2,9 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 
-import '../services/excel_row_mapper.dart';
-import '../services/excel_template_service.dart';
 import '../services/excel_export_service.dart';
+import 'parametros_templates.dart';
 
 class ParametrosViewerScreen extends StatefulWidget {
   final String disciplinaKey;
@@ -24,18 +23,12 @@ class ParametrosViewerScreen extends StatefulWidget {
 
 class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
   String? _selectedProductId;
-  late final Future<ExcelTemplateLoadResult> _templateFuture;
-
-  String get _templateAssetPath => _buildTemplatePath(widget.disciplinaLabel, widget.tipo);
-
-  @override
-  void initState() {
-    super.initState();
-    _templateFuture = const ExcelTemplateService().loadTemplate(_templateAssetPath);
-  }
 
   @override
   Widget build(BuildContext context) {
+    final headers = headersFor(widget.disciplinaKey, widget.tipo);
+    final columns = headers.asMap().entries.map((entry) => DatasetColumn(header: entry.value, order: entry.key)).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -45,39 +38,19 @@ class _ParametrosViewerScreenState extends State<ParametrosViewerScreen> {
         backgroundColor: const Color(0xFF2C3E50),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: FutureBuilder<ExcelTemplateLoadResult>(
-        future: _templateFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return const Center(child: Text('No se pudo cargar la plantilla.'));
-          }
-
-          final template = snapshot.data;
-          final headers = template?.headers ?? [];
-          final columns = headers.asMap().entries.map((entry) => DatasetColumn.fromHeader(entry.value, entry.key)).toList();
-
-          if (widget.tipo == 'reportes') {
-            return _ReportesViewer(
+      body: widget.tipo == 'reportes'
+          ? _ReportesViewer(
               disciplinaLabel: widget.disciplinaLabel,
               disciplinaKey: widget.disciplinaKey,
               columns: columns,
               selectedProductId: _selectedProductId,
               onProductSelected: (productId) => setState(() => _selectedProductId = productId),
-              templateAssetPath: _templateAssetPath,
-            );
-          }
-
-          return _BaseViewer(
-            disciplinaLabel: widget.disciplinaLabel,
-            disciplinaKey: widget.disciplinaKey,
-            columns: columns,
-            templateAssetPath: _templateAssetPath,
-          );
-        },
-      ),
+            )
+          : _BaseViewer(
+              disciplinaLabel: widget.disciplinaLabel,
+              disciplinaKey: widget.disciplinaKey,
+              columns: columns,
+            ),
     );
   }
 }
@@ -86,13 +59,11 @@ class _BaseViewer extends StatelessWidget {
   final String disciplinaLabel;
   final String disciplinaKey;
   final List<DatasetColumn> columns;
-  final String templateAssetPath;
 
   const _BaseViewer({
     required this.disciplinaLabel,
     required this.disciplinaKey,
     required this.columns,
-    required this.templateAssetPath,
   });
 
   @override
@@ -104,7 +75,7 @@ class _BaseViewer extends StatelessWidget {
           toFirestore: (data, _) => data,
         );
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: productsRef.snapshots(),
+      stream: productsRef.where('disciplina', isEqualTo: disciplinaKey).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -115,13 +86,6 @@ class _BaseViewer extends StatelessWidget {
         }
 
         final rows = snapshot.data!.docs
-            .where(
-              (doc) => _matchesDisciplina(
-                doc.data(),
-                disciplinaKey: disciplinaKey,
-                disciplinaLabel: disciplinaLabel,
-              ),
-            )
             .map((doc) => DatasetRow.fromBaseDocument(doc, columns))
             .toList()
           ..sort(DatasetRow.sortByNombre);
@@ -131,7 +95,6 @@ class _BaseViewer extends StatelessWidget {
           rows: rows,
           disciplinaLabel: disciplinaLabel,
           tipo: 'base',
-          templateAssetPath: templateAssetPath,
         );
       },
     );
@@ -144,7 +107,6 @@ class _ReportesViewer extends StatelessWidget {
   final List<DatasetColumn> columns;
   final String? selectedProductId;
   final ValueChanged<String?> onProductSelected;
-  final String templateAssetPath;
 
   const _ReportesViewer({
     required this.disciplinaLabel,
@@ -152,7 +114,6 @@ class _ReportesViewer extends StatelessWidget {
     required this.columns,
     required this.selectedProductId,
     required this.onProductSelected,
-    required this.templateAssetPath,
   });
 
   @override
@@ -164,7 +125,7 @@ class _ReportesViewer extends StatelessWidget {
           toFirestore: (data, _) => data,
         );
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: productsRef.snapshots(),
+      stream: productsRef.where('disciplina', isEqualTo: disciplinaKey).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -175,13 +136,6 @@ class _ReportesViewer extends StatelessWidget {
         }
 
         final products = snapshot.data!.docs
-            .where(
-              (doc) => _matchesDisciplina(
-                doc.data(),
-                disciplinaKey: disciplinaKey,
-                disciplinaLabel: disciplinaLabel,
-              ),
-            )
             .toList();
         if (products.isEmpty) {
           return const Center(child: Text('No hay productos para reportes.'));
@@ -235,7 +189,7 @@ class _ReportesViewer extends StatelessWidget {
                       .map(
                         (doc) => DatasetRow.fromReporteDocument(
                           doc,
-                          ProductRecord(id: currentProductId, data: currentProductDoc.data()),
+                          currentProductDoc,
                           columns,
                         ),
                       )
@@ -247,7 +201,6 @@ class _ReportesViewer extends StatelessWidget {
                     rows: rows,
                     disciplinaLabel: disciplinaLabel,
                     tipo: 'reportes',
-                    templateAssetPath: templateAssetPath,
                   );
                 },
               ),
@@ -264,14 +217,12 @@ class _ViewerContent extends StatelessWidget {
   final List<DatasetRow> rows;
   final String disciplinaLabel;
   final String tipo;
-  final String templateAssetPath;
 
   const _ViewerContent({
     required this.columns,
     required this.rows,
     required this.disciplinaLabel,
     required this.tipo,
-    required this.templateAssetPath,
   });
 
   @override
@@ -279,27 +230,24 @@ class _ViewerContent extends StatelessWidget {
     return Column(
       children: [
         Expanded(
-          child: rows.isEmpty
-              ? const Center(child: Text('No hay parámetros disponibles.'))
-              : SingleChildScrollView(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                      columns: columns
-                          .map((column) => DataColumn(label: Text(column.header)))
-                          .toList(),
-                      rows: rows
-                          .map(
-                            (row) => DataRow(
-                              cells: columns
-                                  .map((column) => DataCell(Text(_stringify(row.values[column.header]))))
-                                  .toList(),
-                            ),
-                          )
-                          .toList(),
-                    ),
+          child: SingleChildScrollView(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: columns.map((column) => DataColumn(label: Text(column.header))).toList(),
+                rows: rows
+                    .map(
+                      (row) => DataRow(
+                        cells: columns
+                            .map((column) => DataCell(Text(_stringify(row.values[column.header]))))
+                            .toList(),
+                      ),
+                    )
+                    .toList(),
                   ),
-                ),
+              ),
+            ),
+          ),
         ),
         Padding(
           padding: const EdgeInsets.all(16),
@@ -322,13 +270,13 @@ class _ViewerContent extends StatelessWidget {
 
   Future<void> _generateExcel(BuildContext context) async {
     try {
-      final template = await const ExcelTemplateService().loadTemplate(templateAssetPath);
-      final excel = template.excel;
-      final sheet = template.sheet;
-      final headers = template.headers;
-
-      _clearDataRows(sheet);
-
+      final excel = Excel.createExcel();
+      if (excel.sheets.keys.contains('Sheet1')) {
+        excel.rename('Sheet1', 'Parametros');
+      }
+      final sheet = excel['Parametros'];
+      final headers = columns.map((column) => column.header).toList();
+      sheet.appendRow(headers.map(TextCellValue.new).toList());
       for (final row in rows) {
         final rowValues = headers.map((header) => _cellValue(row.values[header])).toList();
         sheet.appendRow(rowValues);
@@ -345,13 +293,6 @@ class _ViewerContent extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al generar Excel: $e')),
       );
-    }
-  }
-
-  void _clearDataRows(Sheet sheet) {
-    final totalRows = sheet.maxRows;
-    for (var index = totalRows - 1; index >= 1; index--) {
-      sheet.removeRow(index);
     }
   }
 
@@ -393,106 +334,53 @@ class DatasetColumn {
     required this.header,
     required this.order,
   });
-
-  factory DatasetColumn.fromHeader(String header, int order) {
-    return DatasetColumn(
-      header: header,
-      order: order,
-    );
-  }
 }
 
 class DatasetRow {
   final Map<String, dynamic> values;
+  final String sortKey;
 
-  DatasetRow({required this.values});
+  DatasetRow({required this.values, required this.sortKey});
 
   static int sortByNombre(DatasetRow a, DatasetRow b) {
-    final nombreA = (a.values['nombre']?.toString() ?? '').toLowerCase();
-    final nombreB = (b.values['nombre']?.toString() ?? '').toLowerCase();
-    final nameCompare = nombreA.compareTo(nombreB);
-    if (nameCompare != 0) {
-      return nameCompare;
-    }
-    final idA = _findValueByNormalizedHeader(a.values, 'idactivo') ??
-        _findValueByNormalizedHeader(a.values, 'idreporte') ??
-        '';
-    final idB = _findValueByNormalizedHeader(b.values, 'idactivo') ??
-        _findValueByNormalizedHeader(b.values, 'idreporte') ??
-        '';
-    return idA.compareTo(idB);
+    return a.sortKey.compareTo(b.sortKey);
   }
 
   factory DatasetRow.fromBaseDocument(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
     List<DatasetColumn> columns,
   ) {
-    final data = doc.data();
     final values = <String, dynamic>{};
-    values['nombre'] = data['nombre']?.toString() ?? '';
-    final product = ProductRecord(id: doc.id, data: data);
+    final nombre = doc.data()['nombre']?.toString() ?? '';
 
     for (final column in columns) {
-      values[column.header] = ExcelRowMapper.valueForHeader(column.header, product);
+      values[column.header] = valueForHeader(
+        column.header,
+        productDoc: doc,
+      );
     }
 
-    return DatasetRow(values: values);
+    final sortKey = nombre.isNotEmpty ? nombre.toLowerCase() : doc.id.toLowerCase();
+    return DatasetRow(values: values, sortKey: sortKey);
   }
 
   factory DatasetRow.fromReporteDocument(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
-    ProductRecord product,
+    QueryDocumentSnapshot<Map<String, dynamic>> product,
     List<DatasetColumn> columns,
   ) {
-    final data = doc.data();
     final values = <String, dynamic>{};
-    values['nombre'] = product.data['nombre']?.toString() ?? '';
-    final report = ReportRecord(id: doc.id, data: data);
+    final nombre = product.data()['nombre']?.toString() ?? '';
 
     for (final column in columns) {
-      values[column.header] = ExcelRowMapper.valueForHeader(column.header, product, report: report);
+      values[column.header] = valueForHeader(
+        column.header,
+        productDoc: product,
+        reportDoc: doc,
+      );
     }
 
-    return DatasetRow(values: values);
+    final sortKey = nombre.isNotEmpty ? '${nombre.toLowerCase()}-${doc.id.toLowerCase()}' : doc.id.toLowerCase();
+    return DatasetRow(values: values, sortKey: sortKey);
   }
-}
-
-String? _findValueByNormalizedHeader(Map<String, dynamic> values, String target) {
-  for (final entry in values.entries) {
-    if (ExcelRowMapper.normalizeHeader(entry.key) == target) {
-      return entry.value?.toString();
-    }
-  }
-  return null;
-}
-
-String _buildTemplatePath(String disciplinaLabel, String tipo) {
-  final tipoLabel = tipo == 'base' ? 'Base' : 'Reportes';
-  return 'assets/excel_templates/${disciplinaLabel}_${tipoLabel}_ES.xlsx';
-}
-
-bool _matchesDisciplina(
-  Map<String, dynamic> data, {
-  required String disciplinaKey,
-  required String disciplinaLabel,
-}) {
-  final resolvedKey = _resolveDisciplinaKey(data);
-  if (resolvedKey.isNotEmpty) {
-    return resolvedKey == disciplinaKey.toLowerCase();
-  }
-  final labelValue = data['disciplinaLabel']?.toString() ?? data['disciplina']?.toString() ?? '';
-  if (labelValue.isEmpty) {
-    return false;
-  }
-  return labelValue.toLowerCase() == disciplinaLabel.toLowerCase();
-}
-
-String _resolveDisciplinaKey(Map<String, dynamic> data) {
-  final disciplina = data['disciplina']?.toString();
-  if (disciplina != null && disciplina.isNotEmpty) {
-    return disciplina.toLowerCase();
-  }
-  final attrs = data['attrs'] as Map<String, dynamic>? ?? {};
-  final fallback = data['disciplinaKey'] ?? attrs['disciplinaKey'] ?? attrs['disciplina'];
-  return fallback?.toString().toLowerCase() ?? '';
 }
