@@ -40,11 +40,11 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
   final TextEditingController _nivelCriticidadCtrl = TextEditingController();
   final TextEditingController _impactoFallaCtrl = TextEditingController();
   final TextEditingController _riesgoNormativoCtrl = TextEditingController();
-  final TextEditingController _condicionFisicaCtrl = TextEditingController();
   
   // Variables para Dropdowns/Selectores (estos sí se quedan como variables)
   String _nuevoEstado = 'OPERATIVO';
   String _reposicion = 'NO';
+  String _condicionFisica = 'buena';
 
   DateTime _fechaInspeccion = DateTime.now();
   
@@ -71,7 +71,6 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     _nivelCriticidadCtrl.dispose();
     _impactoFallaCtrl.dispose();
     _riesgoNormativoCtrl.dispose();
-    _condicionFisicaCtrl.dispose();
     super.dispose();
   }
 
@@ -163,6 +162,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       final String reportNumber = nextReportNumber.toString().padLeft(4, '0');
       
       final fechaInspeccion = Timestamp.fromDate(_fechaInspeccion);
+      final double? costoEstimado = _parseDouble(_costoEstimadoCtrl.text);
 
       final productsRef = FirebaseFirestore.instance
           .collection('productos')
@@ -171,49 +171,65 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             toFirestore: (data, _) => data,
           );
 
-      await productsRef
-          .doc(widget.productId)
-          .collection('reportes')
-          .withConverter<Map<String, dynamic>>(
-            fromFirestore: (snapshot, _) => snapshot.data() ?? {},
-            toFirestore: (data, _) => data,
-          )
-          .add({
+      final productRef = productsRef.doc(widget.productId);
+      final productSnap = await productRef.get();
+      final productData = productSnap.data() ?? {};
+      final reportRef = productRef.collection('reportes').doc();
+      final reportData = {
         'nro': reportNumber,
+        'productId': widget.productId,
+        'codigoQR': productData['codigoQR'],
+        'nombreProducto': productData['nombreProducto'] ?? widget.productName,
+        'activo_nombre': widget.productName,
+        'activoNombre': widget.productName,
+        'disciplina': productData['disciplina'],
+        'categoria': productData['categoria'] ?? widget.productCategory,
         'fechaInspeccion': fechaInspeccion,
         'estadoDetectado': _estadoDetectadoCtrl.text.trim(),
         'riesgoElectrico': _riesgoElectricoCtrl.text.trim(),
         'accionRecomendada': _accionRecomendadaCtrl.text.trim(),
-        'costoEstimado': _parseDouble(_costoEstimadoCtrl.text),
+        'costoEstimado': costoEstimado,
         'responsable': _responsableCtrl.text.trim(),
         'tipoReporte': _tipoReporteCtrl.text.trim(),
         'descripcion': _descripcionCtrl.text.trim(),
         'comentarios': _comentariosCtrl.text.trim(),
-        'estadoAnterior': widget.initialStatus,
-        'estadoNuevo': _nuevoEstado,
+        'estadoAnterior': widget.initialStatus.toLowerCase(),
+        'estadoNuevo': _nuevoEstado.toLowerCase(),
         'reposicion': _reposicion,
         'fechaDisplay': DateFormat('dd/MM/yyyy').format(_fechaInspeccion),
         'ubicacion': widget.productLocation,
-      });
+        'createdAt': FieldValue.serverTimestamp(),
+      };
 
-      final productRef = productsRef.doc(widget.productId);
-      final productSnap = await productRef.get();
-      final productData = productSnap.data() ?? {};
-      final frecuencia = productData['frecuenciaMantenimientoMeses'];
-      final meses = frecuencia is int ? frecuencia : int.tryParse(frecuencia?.toString() ?? '');
-      final fechaProximo = meses != null ? _addMonths(_fechaInspeccion, meses) : null;
+      await reportRef.set(reportData);
+      await FirebaseFirestore.instance
+          .collection('reportes')
+          .doc(reportRef.id)
+          .set(reportData);
+      final frecuencia = _parseFrecuenciaMeses(productData['frecuenciaMantenimientoMeses']);
+      final fechaProximo =
+          frecuencia != null ? _addMonthsDouble(_fechaInspeccion, frecuencia) : null;
 
-      await productRef.update({
+      final updateData = <String, dynamic>{
         'estado': _nuevoEstado.toLowerCase(),
         'estadoOperativo': _nuevoEstado.toLowerCase(),
-        'condicionFisica': _condicionFisicaCtrl.text.trim(),
+        'condicionFisica': _condicionFisica.toLowerCase(),
         'fechaUltimaInspeccion': fechaInspeccion,
-        'fechaProximoMantenimiento': fechaProximo != null ? Timestamp.fromDate(fechaProximo) : null,
         'nivelCriticidad': _parseInt(_nivelCriticidadCtrl.text),
         'impactoFalla': _impactoFallaCtrl.text.trim(),
         'riesgoNormativo': _riesgoNormativoCtrl.text.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (fechaProximo != null) {
+        updateData['fechaProximoMantenimiento'] = Timestamp.fromDate(fechaProximo);
+      }
+      if (costoEstimado != null) {
+        // Acumula el costo de mantenimiento de forma atómica.
+        updateData['costoMantenimiento'] = FieldValue.increment(costoEstimado);
+      }
+
+      await productRef.update(updateData);
 
       if (mounted) {
         Navigator.of(context).pop(); 
@@ -267,7 +283,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               "Bloque: ${widget.productLocation['bloque'] ?? '--'} - Nivel: ${widget.productLocation['nivel'] ?? widget.productLocation['piso'] ?? '--'}",
             ),
             _buildReadOnlyField("Categoría", widget.productCategory),
-            _buildReadOnlyField("Estado Actual", widget.initialStatus),
+            _buildReadOnlyField("Estado Actual", widget.initialStatus.toUpperCase()),
 
             const SizedBox(height: 12),
             ListTile(
@@ -324,7 +340,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             
             _buildSegmentedControl(
               label: "Estado*",
-              options: const ['OPERATIVO', 'FUERA DE SERVICIO'],
+              options: const ['OPERATIVO', 'FUERA DE SERVICIO', 'DEFECTUOSO'],
               value: _nuevoEstado,
               onChanged: (newValue) => setState(() => _nuevoEstado = newValue),
             ),
@@ -336,10 +352,11 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               onChanged: (newValue) => setState(() => _reposicion = newValue),
             ),
 
-            _buildTextField(
-              controller: _condicionFisicaCtrl,
+            _buildDropdownField(
               label: "Condición Física",
-              hint: "EJ: Buena / Regular",
+              value: _condicionFisica,
+              items: const ['buena', 'regular', 'mala'],
+              onChanged: (value) => setState(() => _condicionFisica = value ?? _condicionFisica),
             ),
             _buildTextField(
               controller: _nivelCriticidadCtrl,
@@ -493,6 +510,16 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     return int.tryParse(trimmed);
   }
 
+  double? _parseFrecuenciaMeses(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    return double.tryParse(value.toString().replaceAll(',', '.'));
+  }
+
   DateTime _addMonths(DateTime date, int months) {
     final newYear = date.year + ((date.month - 1 + months) ~/ 12);
     final newMonth = ((date.month - 1 + months) % 12) + 1;
@@ -500,6 +527,34 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     final lastDay = DateTime(newYear, newMonth + 1, 0).day;
     final newDay = day > lastDay ? lastDay : day;
     return DateTime(newYear, newMonth, newDay);
+  }
+
+  DateTime _addMonthsDouble(DateTime date, double months) {
+    final wholeMonths = months.floor();
+    final fraction = months - wholeMonths;
+    final baseDate = _addMonths(date, wholeMonths);
+    // Aproximamos la fracción del mes usando 30 días.
+    final extraDays = (fraction * 30).round();
+    return baseDate.add(Duration(days: extraDays));
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: DropdownButtonFormField<String>(
+        value: items.contains(value) ? value : items.first,
+        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+        items: items
+            .map((item) => DropdownMenuItem(value: item, child: Text(item.toUpperCase())))
+            .toList(),
+        onChanged: _isSaving ? null : onChanged,
+      ),
+    );
   }
 
   Widget _buildSegmentedControl({

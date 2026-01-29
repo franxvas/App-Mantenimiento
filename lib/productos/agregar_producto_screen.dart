@@ -32,9 +32,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   final _nivelCtrl = TextEditingController();
   final _areaCtrl = TextEditingController();
   final _tipoActivoCtrl = TextEditingController();
-  final _condicionFisicaCtrl = TextEditingController();
   final _frecuenciaMantenimientoCtrl = TextEditingController();
-  final _costoMantenimientoCtrl = TextEditingController();
   final _costoReemplazoCtrl = TextEditingController();
   final _observacionesCtrl = TextEditingController();
   final _nivelCriticidadCtrl = TextEditingController();
@@ -48,6 +46,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   String _disciplina = 'Electricas';
   String _subcategoria = 'luces_emergencia';
   String _estado = 'operativo';
+  String _condicionFisica = 'buena';
   
   DateTime _fechaCompra = DateTime.now();
   File? _imageFile;
@@ -60,9 +59,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     _nivelCtrl.dispose();
     _areaCtrl.dispose();
     _tipoActivoCtrl.dispose();
-    _condicionFisicaCtrl.dispose();
     _frecuenciaMantenimientoCtrl.dispose();
-    _costoMantenimientoCtrl.dispose();
     _costoReemplazoCtrl.dispose();
     _observacionesCtrl.dispose();
     _nivelCriticidadCtrl.dispose();
@@ -117,6 +114,15 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       // A. Subir imagen
       final String? imageUrl = await _uploadImageToSupabase();
 
+      // Generar el código QR de manera automática y atómica.
+      final disciplinaKey = _disciplina.toLowerCase();
+      final int activoCounter = await _getAndIncrementActivoCounter(disciplinaKey);
+      final String codigoQr = _buildCodigoQr(
+        counter: activoCounter,
+        disciplinaKey: disciplinaKey,
+        nombre: _nombreCtrl.text.trim(),
+      );
+
       // B. Guardar documento
       final schema = await _schemaService.fetchSchema(_disciplina.toLowerCase());
       final attrs = _collectDynamicAttrs(schema?.fields ?? []);
@@ -124,9 +130,9 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       final nivelValue = _nivelCtrl.text;
 
       final productRef = FirebaseFirestore.instance.collection('productos').doc();
-      final disciplinaKey = _disciplina.toLowerCase();
       final productData = {
         'nombre': _nombreCtrl.text,
+        'nombreProducto': _nombreCtrl.text,
         'descripcion': _descripcionCtrl.text,
         'categoria': _categoria,
         'categoriaActivo': _categoria,
@@ -141,15 +147,16 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'tipoActivo': _tipoActivoCtrl.text.trim(),
         'bloque': _bloqueCtrl.text.trim(),
         'espacio': _areaCtrl.text.trim(),
-        'condicionFisica': _condicionFisicaCtrl.text.trim(),
-        'frecuenciaMantenimientoMeses': _parseInt(_frecuenciaMantenimientoCtrl.text),
-        'costoMantenimiento': _parseDouble(_costoMantenimientoCtrl.text),
+        'condicionFisica': _condicionFisica.toLowerCase(),
+        'frecuenciaMantenimientoMeses': _parseDouble(_frecuenciaMantenimientoCtrl.text),
+        'costoMantenimiento': 0.0,
         'costoReemplazo': _parseDouble(_costoReemplazoCtrl.text),
         'observaciones': _observacionesCtrl.text.trim(),
         'nivelCriticidad': _parseInt(_nivelCriticidadCtrl.text),
         'impactoFalla': _impactoFallaCtrl.text.trim(),
         'riesgoNormativo': _riesgoNormativoCtrl.text.trim(),
         ...topLevelValues,
+        'codigoQR': codigoQr,
         // Mapa de ubicación
         'ubicacion': {
           'bloque': _bloqueCtrl.text,
@@ -233,7 +240,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
               // Dropdowns simples para categorías (puedes hacerlos más complejos si quieres)
               _buildDropdown("Disciplina", _disciplina, ['Electricas', 'Sanitarias', 'Estructuras', 'Arquitectura'], (v) => setState(() => _disciplina = v!)),
               _buildDropdown("Categoría", _categoria, ['luminarias', 'tableros', 'bombas', 'otros'], (v) => setState(() => _categoria = v!)),
-              _buildDropdown("Estado Operativo", _estado, ['operativo', 'fuera de servicio'], (v) => setState(() => _estado = v!)),
+              _buildDropdown("Estado Operativo", _estado, ['operativo', 'fuera de servicio', 'defectuoso'], (v) => setState(() => _estado = v!)),
               _buildTextField(null, "Subcategoría (Escribir manual)", isManual: true, onChanged: (val) => _subcategoria = val),
               
               const SizedBox(height: 20),
@@ -249,9 +256,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
               const Text("Parámetros Excel", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               const SizedBox(height: 10),
               _buildTextField(_tipoActivoCtrl, "Tipo de Activo"),
-              _buildTextField(_condicionFisicaCtrl, "Condición Física"),
+              _buildDropdown("Condición Física", _condicionFisica, ['buena', 'regular', 'mala'], (v) => setState(() => _condicionFisica = v!)),
               _buildTextField(_frecuenciaMantenimientoCtrl, "Frecuencia Mantenimiento (meses)", keyboardType: TextInputType.number),
-              _buildTextField(_costoMantenimientoCtrl, "Costo Mantenimiento", keyboardType: TextInputType.number),
               _buildTextField(_costoReemplazoCtrl, "Costo Reemplazo", keyboardType: TextInputType.number),
               _buildTextField(_observacionesCtrl, "Observaciones"),
               _buildTextField(_nivelCriticidadCtrl, "Nivel de Criticidad", keyboardType: TextInputType.number),
@@ -375,7 +381,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         return _buildDropdown(
           field.displayName,
           _estado,
-          ['operativo', 'fuera de servicio'],
+          ['operativo', 'fuera de servicio', 'defectuoso'],
           (value) => setState(() => _estado = value ?? _estado),
         );
       }
@@ -433,4 +439,101 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     }
     return result;
   }
+
+  Future<int> _getAndIncrementActivoCounter(String disciplinaKey) async {
+    final counterRef = FirebaseFirestore.instance
+        .collection('metadata')
+        .doc('counters')
+        .collection('activos')
+        .doc(disciplinaKey);
+
+    return FirebaseFirestore.instance.runTransaction((transaction) async {
+      final snapshot = await transaction.get(counterRef);
+      final data = snapshot.data() ?? <String, dynamic>{};
+      final currentNumber = (data['seq'] as int?) ?? 0;
+      final nextNumber = currentNumber + 1;
+      transaction.set(counterRef, {'seq': nextNumber}, SetOptions(merge: true));
+      return nextNumber;
+    });
+  }
+
+  String _buildCodigoQr({
+    required int counter,
+    required String disciplinaKey,
+    required String nombre,
+  }) {
+    final disciplinaCode = _disciplinaCodeMap[disciplinaKey] ?? 'GEN';
+    final firstWord = _extractFirstWord(nombre);
+    final padded = counter.toString().padLeft(4, '0');
+    return 'A-$padded-$disciplinaCode-$firstWord-$padded';
+  }
+
+  String _extractFirstWord(String nombre) {
+    final normalized = _removeDiacritics(nombre.trim());
+    final parts = normalized.split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) {
+      return 'ACTIVO';
+    }
+    final sanitized = parts.first.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    return sanitized.isEmpty ? 'ACTIVO' : sanitized;
+  }
+
+  String _removeDiacritics(String input) {
+    const replacements = {
+      'á': 'a',
+      'à': 'a',
+      'ä': 'a',
+      'â': 'a',
+      'Á': 'A',
+      'À': 'A',
+      'Ä': 'A',
+      'Â': 'A',
+      'é': 'e',
+      'è': 'e',
+      'ë': 'e',
+      'ê': 'e',
+      'É': 'E',
+      'È': 'E',
+      'Ë': 'E',
+      'Ê': 'E',
+      'í': 'i',
+      'ì': 'i',
+      'ï': 'i',
+      'î': 'i',
+      'Í': 'I',
+      'Ì': 'I',
+      'Ï': 'I',
+      'Î': 'I',
+      'ó': 'o',
+      'ò': 'o',
+      'ö': 'o',
+      'ô': 'o',
+      'Ó': 'O',
+      'Ò': 'O',
+      'Ö': 'O',
+      'Ô': 'O',
+      'ú': 'u',
+      'ù': 'u',
+      'ü': 'u',
+      'û': 'u',
+      'Ú': 'U',
+      'Ù': 'U',
+      'Ü': 'U',
+      'Û': 'U',
+      'ñ': 'n',
+      'Ñ': 'N',
+    };
+    var output = input;
+    replacements.forEach((key, value) {
+      output = output.replaceAll(key, value);
+    });
+    return output;
+  }
+
+  static const Map<String, String> _disciplinaCodeMap = {
+    'electricas': 'ELECT',
+    'sanitarias': 'SAN',
+    'arquitectura': 'ARQ',
+    'estructuras': 'EST',
+  };
 }

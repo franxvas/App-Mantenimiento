@@ -175,7 +175,7 @@ dynamic valueForHeader(
     case 'Nivel_Criticidad':
       return productData['nivelCriticidad'] ?? '';
     case 'Fecha_Ultima_Inspeccion':
-      return _formatDate(productData['ultimaInspeccionFecha']);
+      return _formatDate(productData['fechaUltimaInspeccion'] ?? productData['ultimaInspeccionFecha']);
     case 'Fecha_Proximo_Mantenimiento':
       return _formatDate(productData['fechaProximoMantenimiento']);
     case 'Fecha_Instalacion':
@@ -187,13 +187,13 @@ dynamic valueForHeader(
     case 'ID_Reporte':
       return reportDoc?.id ?? '';
     case 'Fecha_Inspeccion':
-      return _formatDate(reportData['fecha']);
+      return _formatDate(reportData['fechaInspeccion'] ?? reportData['fecha']);
     case 'Estado_Detectado':
-      return reportData['estado'] ?? '';
+      return reportData['estadoDetectado'] ?? reportData['estado'] ?? '';
     case 'Accion_Recomendada':
-      return reportData['accion'] ?? '';
+      return reportData['accionRecomendada'] ?? reportData['accion'] ?? '';
     case 'Costo_Estimado':
-      return reportData['costo'] ?? '';
+      return reportData['costoEstimado'] ?? reportData['costo'] ?? '';
     case 'Responsable':
       return reportData['responsable'] ?? '';
     case 'Riesgo_Electrico':

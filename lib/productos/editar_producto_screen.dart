@@ -34,7 +34,6 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final _bloqueController = TextEditingController();
   final _espacioController = TextEditingController();
   final _tipoActivoController = TextEditingController();
-  final _condicionFisicaController = TextEditingController();
   final _frecuenciaMantenimientoController = TextEditingController();
   final _costoMantenimientoController = TextEditingController();
   final _costoReemplazoController = TextEditingController();
@@ -45,6 +44,8 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final Map<String, TextEditingController> _dynamicControllers = {};
 
   String _estado = 'operativo';
+  String _condicionFisica = 'buena';
+  static const List<String> _condicionOptions = ['buena', 'regular', 'mala'];
   
   File? _imageFile; // Archivo local seleccionado
   String? _currentImageUrl; // URL de imagen actual en Firebase/Supabase
@@ -62,7 +63,10 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _espacioController.text = widget.initialData['espacio']?.toString() ??
         widget.initialData['ubicacion']?['area']?.toString() ??
         '';
-    _estado = widget.initialData['estado'] ?? 'operativo';
+    final estadoInicial = widget.initialData['estado']?.toString().toLowerCase() ?? 'operativo';
+    _estado = ['operativo', 'fuera de servicio', 'defectuoso'].contains(estadoInicial)
+        ? estadoInicial
+        : 'operativo';
     // Asumimos que la base de datos guarda la URL COMPLETA ahora
     _currentImageUrl = widget.initialData['imagenUrl']; 
 
@@ -74,7 +78,10 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     }
 
     _tipoActivoController.text = widget.initialData['tipoActivo']?.toString() ?? '';
-    _condicionFisicaController.text = widget.initialData['condicionFisica']?.toString() ?? '';
+    final condicionInicial = widget.initialData['condicionFisica']?.toString().toLowerCase();
+    if (condicionInicial != null && _condicionOptions.contains(condicionInicial)) {
+      _condicionFisica = condicionInicial;
+    }
     _frecuenciaMantenimientoController.text =
         widget.initialData['frecuenciaMantenimientoMeses']?.toString() ?? '';
     _costoMantenimientoController.text = widget.initialData['costoMantenimiento']?.toString() ?? '';
@@ -93,7 +100,6 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _bloqueController.dispose();
     _espacioController.dispose();
     _tipoActivoController.dispose();
-    _condicionFisicaController.dispose();
     _frecuenciaMantenimientoController.dispose();
     _costoMantenimientoController.dispose();
     _costoReemplazoController.dispose();
@@ -177,9 +183,13 @@ Future<String?> _uploadToSupabase() async {
     final schema = disciplinaKey.isNotEmpty ? await _schemaService.fetchSchema(disciplinaKey) : null;
     final attrs = _collectDynamicAttrs(schema?.fields ?? []);
     final topLevelValues = _extractTopLevel(attrs);
+    final productRef = FirebaseFirestore.instance.collection('productos').doc(widget.productId);
+    final currentSnapshot = await productRef.get();
+    final currentCostoMantenimiento = currentSnapshot.data()?['costoMantenimiento'];
 
     final productData = {
       'nombre': _nombreController.text,
+      'nombreProducto': _nombreController.text,
       'descripcion': _descripcionController.text,
       'estado': _estado,
       'estadoOperativo': _estado,
@@ -191,9 +201,9 @@ Future<String?> _uploadToSupabase() async {
       'tipoActivo': _tipoActivoController.text.trim(),
       'bloque': _bloqueController.text.trim(),
       'espacio': _espacioController.text.trim(),
-      'condicionFisica': _condicionFisicaController.text.trim(),
-      'frecuenciaMantenimientoMeses': _parseInt(_frecuenciaMantenimientoController.text),
-      'costoMantenimiento': _parseDouble(_costoMantenimientoController.text),
+      'condicionFisica': _condicionFisica.toLowerCase(),
+      'frecuenciaMantenimientoMeses': _parseDouble(_frecuenciaMantenimientoController.text),
+      'costoMantenimiento': currentCostoMantenimiento ?? _parseDouble(_costoMantenimientoController.text),
       'costoReemplazo': _parseDouble(_costoReemplazoController.text),
       'observaciones': _observacionesController.text.trim(),
       'nivelCriticidad': _parseInt(_nivelCriticidadController.text),
@@ -212,7 +222,6 @@ Future<String?> _uploadToSupabase() async {
     }
 
     final columns = await _parametrosSchemaService.fetchColumns(disciplinaKey, 'base');
-    final productRef = FirebaseFirestore.instance.collection('productos').doc(widget.productId);
     await _datasetService.updateProductoWithDataset(
       productRef: productRef,
       productData: productData,
@@ -320,9 +329,15 @@ Future<String?> _uploadToSupabase() async {
               decoration: const InputDecoration(labelText: 'Tipo de Activo'),
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _condicionFisicaController,
+            DropdownButtonFormField<String>(
+              value: _condicionFisica,
               decoration: const InputDecoration(labelText: 'Condición Física'),
+              items: const [
+                DropdownMenuItem(value: 'buena', child: Text('BUENA')),
+                DropdownMenuItem(value: 'regular', child: Text('REGULAR')),
+                DropdownMenuItem(value: 'mala', child: Text('MALA')),
+              ],
+              onChanged: (value) => setState(() => _condicionFisica = value ?? _condicionFisica),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -333,8 +348,13 @@ Future<String?> _uploadToSupabase() async {
             const SizedBox(height: 12),
             TextFormField(
               controller: _costoMantenimientoController,
-              decoration: const InputDecoration(labelText: 'Costo Mantenimiento'),
+              decoration: const InputDecoration(
+                labelText: 'Costo Mantenimiento',
+                helperText: 'Se calcula automáticamente desde reportes.',
+                suffixIcon: Icon(Icons.lock_outline, size: 16),
+              ),
               keyboardType: TextInputType.number,
+              readOnly: true,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -373,6 +393,7 @@ Future<String?> _uploadToSupabase() async {
                 items: const [
                   DropdownMenuItem(value: 'operativo', child: Text('OPERATIVO')),
                   DropdownMenuItem(value: 'fuera de servicio', child: Text('FUERA DE SERVICIO')),
+                  DropdownMenuItem(value: 'defectuoso', child: Text('DEFECTUOSO')),
                 ],
                 onChanged: (value) => setState(() => _estado = value ?? _estado),
               ),
