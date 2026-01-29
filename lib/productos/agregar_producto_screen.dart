@@ -44,6 +44,12 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   String _disciplina = 'Electricas';
   String _subcategoria = 'luces_emergencia';
   String _estado = 'operativo';
+  String _condicionFisica = 'buena';
+  String _tipoMantenimiento = 'preventivo';
+  String _nivelCriticidad = 'medio';
+  String _impactoFalla = 'operacion';
+  String _riesgoNormativo = 'cumple';
+  bool _requiereReemplazo = false;
   
   DateTime _fechaCompra = DateTime.now();
   DateTime? _fechaInstalacion;
@@ -362,7 +368,10 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       'fechaCompra',
       'estadoOperativo',
       'condicionFisica',
+      'tipoMantenimiento',
       'frecuenciaMantenimientoMeses',
+      'fechaUltimaInspeccion',
+      'fechaProximoMantenimiento',
       'costoMantenimiento',
       'costoReemplazo',
       'observaciones',

@@ -422,6 +422,8 @@ Future<String?> _uploadToSupabase() async {
       'fechaCompra',
       'estadoOperativo',
       'frecuenciaMantenimientoMeses',
+      'fechaUltimaInspeccion',
+      'fechaProximoMantenimiento',
       'costoMantenimiento',
       'costoReemplazo',
       'fechaInstalacion',
