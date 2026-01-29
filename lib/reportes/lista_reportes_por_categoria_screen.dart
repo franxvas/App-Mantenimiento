@@ -40,7 +40,38 @@ class ListaReportesPorCategoriaScreen extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+          if (snapshot.hasError) {
+            final errorMessage = snapshot.error.toString();
+            final needsIndex = errorMessage.contains('failed-precondition') ||
+                errorMessage.contains('requires an index');
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.warning_amber, size: 48, color: Colors.orange),
+                    const SizedBox(height: 12),
+                    Text(
+                      needsIndex
+                          ? 'Falta crear un índice compuesto para reportes por categoría.'
+                          : 'Ocurrió un error al cargar los reportes.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      needsIndex
+                          ? 'Crea un índice con: categoria ASC + fechaInspeccion DESC.'
+                          : errorMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
 
           final docs = snapshot.data!.docs;
 
@@ -106,14 +137,22 @@ class _ReporteListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String estado =
-        reporte['estadoNuevo'] ?? reporte['estado_nuevo'] ?? reporte['estadoDetectado'] ?? 'Pendiente';
+    final String estado = reporte['estadoDetectado'] ??
+        reporte['estadoNuevo'] ??
+        reporte['estado_nuevo'] ??
+        reporte['estado'] ??
+        'Pendiente';
     final bool isOk = estado.toLowerCase() == 'operativo' || estado.toLowerCase() == 'completado';
     final Color statusColor = isOk ? Colors.green : Colors.red;
     
     // Fecha
     final Timestamp? ts = reporte['fechaInspeccion'] ?? reporte['fecha'];
     final String fecha = ts != null ? DateFormat('dd/MM/yyyy').format(ts.toDate()) : '--';
+    final String accionRecomendada = reporte['accionRecomendada'] ??
+        reporte['accion'] ??
+        reporte['descripcion'] ??
+        reporte['motivo'] ??
+        '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -151,7 +190,7 @@ class _ReporteListCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("N° ${reporte['nro']} • $fecha"),
-              Text(reporte['descripcion'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(accionRecomendada, maxLines: 1, overflow: TextOverflow.ellipsis),
             ],
           ),
           trailing: Column(
