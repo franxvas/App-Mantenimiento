@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Importar Supabase
+import 'package:intl/intl.dart';
 import 'package:appmantflutter/services/parametros_dataset_service.dart';
 import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
@@ -34,19 +35,32 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final _bloqueController = TextEditingController();
   final _espacioController = TextEditingController();
   final _tipoActivoController = TextEditingController();
+  final _idActivoController = TextEditingController();
   final _frecuenciaMantenimientoController = TextEditingController();
   final _costoMantenimientoController = TextEditingController();
   final _costoReemplazoController = TextEditingController();
   final _observacionesController = TextEditingController();
-  final _nivelCriticidadController = TextEditingController();
-  final _impactoFallaController = TextEditingController();
-  final _riesgoNormativoController = TextEditingController();
+  final _vidaUtilEsperadaController = TextEditingController();
   final Map<String, TextEditingController> _dynamicControllers = {};
 
   String _estado = 'operativo';
   String _condicionFisica = 'buena';
+  String _tipoMantenimiento = 'preventivo';
+  String _nivelCriticidad = 'medio';
+  String _impactoFalla = 'operacion';
+  String _riesgoNormativo = 'cumple';
+  bool _requiereReemplazo = false;
   static const List<String> _condicionOptions = ['buena', 'regular', 'mala'];
+  static const List<String> _estadoOptions = ['operativo', 'defectuoso', 'fuera_servicio'];
+  static const List<String> _tipoMantenimientoOptions = ['preventivo', 'correctivo'];
+  static const List<String> _nivelCriticidadOptions = ['alto', 'medio', 'bajo'];
+  static const List<String> _impactoFallaOptions = ['seguridad', 'operacion', 'confort'];
+  static const List<String> _riesgoNormativoOptions = ['cumple', 'no_cumple', 'evaluar'];
   
+  DateTime? _fechaUltimaInspeccion;
+  DateTime? _fechaProximoMantenimiento;
+  DateTime? _fechaInstalacion;
+
   File? _imageFile; // Archivo local seleccionado
   String? _currentImageUrl; // URL de imagen actual en Firebase/Supabase
 
@@ -63,10 +77,10 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _espacioController.text = widget.initialData['espacio']?.toString() ??
         widget.initialData['ubicacion']?['area']?.toString() ??
         '';
-    final estadoInicial = widget.initialData['estado']?.toString().toLowerCase() ?? 'operativo';
-    _estado = ['operativo', 'fuera de servicio', 'defectuoso'].contains(estadoInicial)
-        ? estadoInicial
-        : 'operativo';
+    final estadoInicial = widget.initialData['estadoOperativo']?.toString().toLowerCase() ??
+        widget.initialData['estado']?.toString().toLowerCase() ??
+        'operativo';
+    _estado = _estadoOptions.contains(estadoInicial) ? estadoInicial : 'operativo';
     // Asumimos que la base de datos guarda la URL COMPLETA ahora
     _currentImageUrl = widget.initialData['imagenUrl']; 
 
@@ -78,18 +92,37 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     }
 
     _tipoActivoController.text = widget.initialData['tipoActivo']?.toString() ?? '';
+    _idActivoController.text = widget.initialData['idActivo']?.toString() ?? '';
     final condicionInicial = widget.initialData['condicionFisica']?.toString().toLowerCase();
     if (condicionInicial != null && _condicionOptions.contains(condicionInicial)) {
       _condicionFisica = condicionInicial;
+    }
+    final tipoMantenimientoInicial = widget.initialData['tipoMantenimiento']?.toString().toLowerCase();
+    if (tipoMantenimientoInicial != null && _tipoMantenimientoOptions.contains(tipoMantenimientoInicial)) {
+      _tipoMantenimiento = tipoMantenimientoInicial;
+    }
+    final nivelCriticidadInicial = widget.initialData['nivelCriticidad']?.toString().toLowerCase();
+    if (nivelCriticidadInicial != null && _nivelCriticidadOptions.contains(nivelCriticidadInicial)) {
+      _nivelCriticidad = nivelCriticidadInicial;
+    }
+    final impactoFallaInicial = widget.initialData['impactoFalla']?.toString().toLowerCase();
+    if (impactoFallaInicial != null && _impactoFallaOptions.contains(impactoFallaInicial)) {
+      _impactoFalla = impactoFallaInicial;
+    }
+    final riesgoNormativoInicial = widget.initialData['riesgoNormativo']?.toString().toLowerCase();
+    if (riesgoNormativoInicial != null && _riesgoNormativoOptions.contains(riesgoNormativoInicial)) {
+      _riesgoNormativo = riesgoNormativoInicial;
     }
     _frecuenciaMantenimientoController.text =
         widget.initialData['frecuenciaMantenimientoMeses']?.toString() ?? '';
     _costoMantenimientoController.text = widget.initialData['costoMantenimiento']?.toString() ?? '';
     _costoReemplazoController.text = widget.initialData['costoReemplazo']?.toString() ?? '';
     _observacionesController.text = widget.initialData['observaciones']?.toString() ?? '';
-    _nivelCriticidadController.text = widget.initialData['nivelCriticidad']?.toString() ?? '';
-    _impactoFallaController.text = widget.initialData['impactoFalla']?.toString() ?? '';
-    _riesgoNormativoController.text = widget.initialData['riesgoNormativo']?.toString() ?? '';
+    _vidaUtilEsperadaController.text = widget.initialData['vidaUtilEsperadaAnios']?.toString() ?? '';
+    _requiereReemplazo = widget.initialData['requiereReemplazo'] == true;
+    _fechaUltimaInspeccion = _resolveDate(widget.initialData['fechaUltimaInspeccion']);
+    _fechaProximoMantenimiento = _resolveDate(widget.initialData['fechaProximoMantenimiento']);
+    _fechaInstalacion = _resolveDate(widget.initialData['fechaInstalacion']);
   }
 
   @override
@@ -100,13 +133,12 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _bloqueController.dispose();
     _espacioController.dispose();
     _tipoActivoController.dispose();
+    _idActivoController.dispose();
     _frecuenciaMantenimientoController.dispose();
     _costoMantenimientoController.dispose();
     _costoReemplazoController.dispose();
     _observacionesController.dispose();
-    _nivelCriticidadController.dispose();
-    _impactoFallaController.dispose();
-    _riesgoNormativoController.dispose();
+    _vidaUtilEsperadaController.dispose();
     for (final controller in _dynamicControllers.values) {
       controller.dispose();
     }
@@ -199,16 +231,23 @@ Future<String?> _uploadToSupabase() async {
       'categoriaActivo': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'subcategoria': widget.initialData['subcategoria'],
       'tipoActivo': _tipoActivoController.text.trim(),
+      'idActivo': _idActivoController.text.trim(),
       'bloque': _bloqueController.text.trim(),
       'espacio': _espacioController.text.trim(),
       'condicionFisica': _condicionFisica.toLowerCase(),
+      'tipoMantenimiento': _tipoMantenimiento,
       'frecuenciaMantenimientoMeses': _parseDouble(_frecuenciaMantenimientoController.text),
       'costoMantenimiento': currentCostoMantenimiento ?? _parseDouble(_costoMantenimientoController.text),
       'costoReemplazo': _parseDouble(_costoReemplazoController.text),
       'observaciones': _observacionesController.text.trim(),
-      'nivelCriticidad': _parseInt(_nivelCriticidadController.text),
-      'impactoFalla': _impactoFallaController.text.trim(),
-      'riesgoNormativo': _riesgoNormativoController.text.trim(),
+      'nivelCriticidad': _nivelCriticidad,
+      'impactoFalla': _impactoFalla,
+      'riesgoNormativo': _riesgoNormativo,
+      'fechaUltimaInspeccion': _fechaUltimaInspeccion,
+      'fechaProximoMantenimiento': _fechaProximoMantenimiento,
+      'fechaInstalacion': _fechaInstalacion,
+      'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaController.text),
+      'requiereReemplazo': _requiereReemplazo,
       ...topLevelValues,
       'ubicacion': {
         'nivel': _nivelController.text,
@@ -329,15 +368,30 @@ Future<String?> _uploadToSupabase() async {
               decoration: const InputDecoration(labelText: 'Tipo de Activo'),
             ),
             const SizedBox(height: 12),
+            TextFormField(
+              controller: _idActivoController,
+              decoration: const InputDecoration(labelText: 'ID Activo'),
+            ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _condicionFisica,
               decoration: const InputDecoration(labelText: 'Condición Física'),
               items: const [
-                DropdownMenuItem(value: 'buena', child: Text('BUENA')),
-                DropdownMenuItem(value: 'regular', child: Text('REGULAR')),
-                DropdownMenuItem(value: 'mala', child: Text('MALA')),
+                DropdownMenuItem(value: 'buena', child: Text('Buena')),
+                DropdownMenuItem(value: 'regular', child: Text('Regular')),
+                DropdownMenuItem(value: 'mala', child: Text('Mala')),
               ],
               onChanged: (value) => setState(() => _condicionFisica = value ?? _condicionFisica),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _tipoMantenimiento,
+              decoration: const InputDecoration(labelText: 'Tipo de Mantenimiento'),
+              items: const [
+                DropdownMenuItem(value: 'preventivo', child: Text('Preventivo')),
+                DropdownMenuItem(value: 'correctivo', child: Text('Correctivo')),
+              ],
+              onChanged: (value) => setState(() => _tipoMantenimiento = value ?? _tipoMantenimiento),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -369,20 +423,78 @@ Future<String?> _uploadToSupabase() async {
               maxLines: 2,
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _nivelCriticidadController,
+            DropdownButtonFormField<String>(
+              value: _nivelCriticidad,
               decoration: const InputDecoration(labelText: 'Nivel de Criticidad'),
+              items: const [
+                DropdownMenuItem(value: 'alto', child: Text('Alto')),
+                DropdownMenuItem(value: 'medio', child: Text('Medio')),
+                DropdownMenuItem(value: 'bajo', child: Text('Bajo')),
+              ],
+              onChanged: (value) => setState(() => _nivelCriticidad = value ?? _nivelCriticidad),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _impactoFalla,
+              decoration: const InputDecoration(labelText: 'Impacto de Falla'),
+              items: const [
+                DropdownMenuItem(value: 'seguridad', child: Text('Seguridad')),
+                DropdownMenuItem(value: 'operacion', child: Text('Operación')),
+                DropdownMenuItem(value: 'confort', child: Text('Confort')),
+              ],
+              onChanged: (value) => setState(() => _impactoFalla = value ?? _impactoFalla),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _riesgoNormativo,
+              decoration: const InputDecoration(labelText: 'Riesgo Normativo'),
+              items: const [
+                DropdownMenuItem(value: 'cumple', child: Text('Cumple')),
+                DropdownMenuItem(value: 'no_cumple', child: Text('No cumple')),
+                DropdownMenuItem(value: 'evaluar', child: Text('Evaluar')),
+              ],
+              onChanged: (value) => setState(() => _riesgoNormativo = value ?? _riesgoNormativo),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _vidaUtilEsperadaController,
+              decoration: const InputDecoration(labelText: 'Vida Útil Esperada (Años)'),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _impactoFallaController,
-              decoration: const InputDecoration(labelText: 'Impacto de Falla'),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Requiere Reemplazo'),
+              value: _requiereReemplazo,
+              onChanged: (value) => setState(() => _requiereReemplazo = value),
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _riesgoNormativoController,
-              decoration: const InputDecoration(labelText: 'Riesgo Normativo'),
+            ListTile(
+              title: const Text("Fecha Última Inspección"),
+              subtitle: Text(_formatDate(_fechaUltimaInspeccion)),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: () => _selectOptionalDate(
+                initialDate: _fechaUltimaInspeccion,
+                onSelected: (date) => setState(() => _fechaUltimaInspeccion = date),
+              ),
+            ),
+            ListTile(
+              title: const Text("Fecha Próximo Mantenimiento"),
+              subtitle: Text(_formatDate(_fechaProximoMantenimiento)),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: () => _selectOptionalDate(
+                initialDate: _fechaProximoMantenimiento,
+                onSelected: (date) => setState(() => _fechaProximoMantenimiento = date),
+              ),
+            ),
+            ListTile(
+              title: const Text("Fecha Instalación"),
+              subtitle: Text(_formatDate(_fechaInstalacion)),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: () => _selectOptionalDate(
+                initialDate: _fechaInstalacion,
+                onSelected: (date) => setState(() => _fechaInstalacion = date),
+              ),
             ),
 
             Padding(
@@ -391,9 +503,9 @@ Future<String?> _uploadToSupabase() async {
                 value: _estado,
                 decoration: const InputDecoration(labelText: 'Estado'),
                 items: const [
-                  DropdownMenuItem(value: 'operativo', child: Text('OPERATIVO')),
-                  DropdownMenuItem(value: 'fuera de servicio', child: Text('FUERA DE SERVICIO')),
-                  DropdownMenuItem(value: 'defectuoso', child: Text('DEFECTUOSO')),
+                  DropdownMenuItem(value: 'operativo', child: Text('Operativo')),
+                  DropdownMenuItem(value: 'defectuoso', child: Text('Defectuoso')),
+                  DropdownMenuItem(value: 'fuera_servicio', child: Text('Fuera servicio')),
                 ],
                 onChanged: (value) => setState(() => _estado = value ?? _estado),
               ),
@@ -449,18 +561,25 @@ Future<String?> _uploadToSupabase() async {
       'categoria',
       'categoriaActivo',
       'tipoActivo',
+      'idActivo',
       'subcategoria',
       'descripcion',
       'fechaCompra',
       'estadoOperativo',
       'condicionFisica',
+      'tipoMantenimiento',
       'frecuenciaMantenimientoMeses',
+      'fechaUltimaInspeccion',
+      'fechaProximoMantenimiento',
       'costoMantenimiento',
       'costoReemplazo',
       'observaciones',
       'nivelCriticidad',
       'impactoFalla',
       'riesgoNormativo',
+      'fechaInstalacion',
+      'vidaUtilEsperadaAnios',
+      'requiereReemplazo',
       'updatedAt',
       'imagenUrl',
     };
@@ -512,6 +631,44 @@ Future<String?> _uploadToSupabase() async {
       return null;
     }
     return double.tryParse(trimmed.replaceAll(',', '.'));
+  }
+
+  DateTime? _resolveDate(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
+
+  String _formatDate(DateTime? value) {
+    if (value == null) {
+      return '--/--/----';
+    }
+    return DateFormat('dd/MM/yyyy').format(value);
+  }
+
+  Future<void> _selectOptionalDate({
+    required DateTime? initialDate,
+    required ValueChanged<DateTime> onSelected,
+  }) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null) {
+      onSelected(picked);
+    }
   }
 
   String _resolveNivel(Map<String, dynamic> data) {

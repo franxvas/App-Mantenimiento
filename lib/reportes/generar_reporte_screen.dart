@@ -283,7 +283,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               "Bloque: ${widget.productLocation['bloque'] ?? '--'} - Nivel: ${widget.productLocation['nivel'] ?? widget.productLocation['piso'] ?? '--'}",
             ),
             _buildReadOnlyField("Categoría", widget.productCategory),
-            _buildReadOnlyField("Estado Actual", widget.initialStatus.toUpperCase()),
+            _buildReadOnlyField("Estado Actual", _formatEstadoLabel(widget.initialStatus)),
 
             const SizedBox(height: 12),
             ListTile(
@@ -340,7 +340,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             
             _buildSegmentedControl(
               label: "Estado*",
-              options: const ['OPERATIVO', 'FUERA DE SERVICIO', 'DEFECTUOSO'],
+              options: const ['OPERATIVO', 'DEFECTUOSO', 'FUERA_SERVICIO'],
               value: _nuevoEstado,
               onChanged: (newValue) => setState(() => _nuevoEstado = newValue),
             ),
@@ -597,7 +597,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        option,
+                        _formatEstadoLabel(option),
                         style: TextStyle(
                           color: isSelected ? Colors.white : Colors.black87,
                           fontWeight: FontWeight.bold,
@@ -612,5 +612,16 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         ],
       ),
     );
+  }
+
+  String _formatEstadoLabel(String estado) {
+    final normalized = estado.replaceAll('_', ' ');
+    if (normalized.isEmpty) {
+      return estado;
+    }
+    return normalized
+        .split(' ')
+        .map((word) => word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
   }
 }
