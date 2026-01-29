@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:appmantflutter/productos/detalle_producto_screen.dart';
+import 'package:appmantflutter/reportes/generar_reporte_screen.dart';
 
 
 class QRScannerScreen extends StatefulWidget {
-  const QRScannerScreen({super.key});
+  final bool goToReport;
+
+  const QRScannerScreen({super.key, this.goToReport = false});
 
   @override
   State<QRScannerScreen> createState() => _QRScannerScreenState();
@@ -55,16 +58,37 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
       if (querySnapshot.docs.isNotEmpty) {
         // 2. ¡ENCONTRADO! Obtener el ID del documento
-        final String productId = querySnapshot.docs.first.id;
+        final doc = querySnapshot.docs.first;
+        final String productId = doc.id;
+        final data = doc.data();
 
         if (mounted) {
-          // Navegar al detalle (usamos pushReplacement para cerrar la cámara)
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DetalleProductoScreen(productId: productId),
-            ),
-          );
+          if (widget.goToReport) {
+            final nombre = data['nombre'] ?? 'Sin nombre';
+            final categoria = data['categoria'] ?? 'N/A';
+            final estado = data['estado'] ?? 'operativo';
+            final ubicacion = data['ubicacion'] ?? <String, dynamic>{};
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => GenerarReporteScreen(
+                  productId: productId,
+                  productName: nombre,
+                  productCategory: categoria,
+                  initialStatus: estado,
+                  productLocation: ubicacion,
+                ),
+              ),
+            );
+          } else {
+            // Navegar al detalle (usamos pushReplacement para cerrar la cámara)
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DetalleProductoScreen(productId: productId),
+              ),
+            );
+          }
         }
       } else {
         // 3. NO ENCONTRADO

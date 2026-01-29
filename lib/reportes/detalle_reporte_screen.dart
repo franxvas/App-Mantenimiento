@@ -52,7 +52,11 @@ class DetalleReporteScreen extends StatelessWidget {
         }
 
         final data = snapshot.data!.data() ?? <String, dynamic>{};
-        final String estado = data['estadoDetectado'] ?? data['estado_nuevo'] ?? data['estado'] ?? 'Desconocido';
+        final String estado = data['estadoOperativo'] ??
+            data['estadoDetectado'] ??
+            data['estado_nuevo'] ??
+            data['estado'] ??
+            'registrado';
         final bool isCompleted = estado.toLowerCase() == 'completado' || estado.toLowerCase() == 'operativo';
         
         // Manejo de Fechas
@@ -164,7 +168,7 @@ class DetalleReporteScreen extends StatelessWidget {
                   children: [
                     Icon(isCompleted ? FontAwesomeIcons.check : FontAwesomeIcons.exclamation, color: Colors.white, size: 14),
                     const SizedBox(width: 8),
-                    Text(estado.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text(_formatEstadoLabel(estado), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
@@ -199,6 +203,17 @@ class DetalleReporteScreen extends StatelessWidget {
     );
   }
   
+  String _formatEstadoLabel(String estado) {
+    final normalized = estado.replaceAll('_', ' ');
+    if (normalized.isEmpty) {
+      return estado;
+    }
+    return normalized
+        .split(' ')
+        .map((word) => word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
+  }
+
   Widget _buildDetails(Map<String, dynamic> data) {
     // Leemos la ubicación del mapa guardado
     final ubicacion = data['ubicacion'] ?? {};

@@ -36,15 +36,16 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
   final TextEditingController _riesgoElectricoCtrl = TextEditingController();
   final TextEditingController _accionRecomendadaCtrl = TextEditingController();
   final TextEditingController _costoEstimadoCtrl = TextEditingController();
-  final TextEditingController _responsableCtrl = TextEditingController();
-  final TextEditingController _nivelCriticidadCtrl = TextEditingController();
-  final TextEditingController _impactoFallaCtrl = TextEditingController();
-  final TextEditingController _riesgoNormativoCtrl = TextEditingController();
-  final TextEditingController _condicionFisicaCtrl = TextEditingController();
   
   // Variables para Dropdowns/Selectores (estos sí se quedan como variables)
   String _nuevoEstado = 'OPERATIVO';
   String _reposicion = 'NO';
+  String _condicionFisica = 'buena';
+  String _tipoMantenimiento = 'preventivo';
+  String _nivelCriticidad = 'medio';
+  String _impactoFalla = 'operacion';
+  String _riesgoNormativo = 'cumple';
+  bool _requiereReemplazo = false;
 
   DateTime _fechaInspeccion = DateTime.now();
   
@@ -67,11 +68,6 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     _riesgoElectricoCtrl.dispose();
     _accionRecomendadaCtrl.dispose();
     _costoEstimadoCtrl.dispose();
-    _responsableCtrl.dispose();
-    _nivelCriticidadCtrl.dispose();
-    _impactoFallaCtrl.dispose();
-    _riesgoNormativoCtrl.dispose();
-    _condicionFisicaCtrl.dispose();
     super.dispose();
   }
 
@@ -80,44 +76,11 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     final user = FirebaseAuth.instance.currentUser;
     
     if (user != null) {
-      if (mounted) setState(() => _encargadoCtrl.text = "Cargando...");
-
-      try {
-        final querySnapshot = await FirebaseFirestore.instance
-            .collection('usuarios')
-            .withConverter<Map<String, dynamic>>(
-              fromFirestore: (snapshot, _) => snapshot.data() ?? {},
-              toFirestore: (data, _) => data,
-            )
-            .where('email', isEqualTo: user.email)
-            .limit(1)
-            .get();
-
-        if (querySnapshot.docs.isNotEmpty) {
-          final userData = querySnapshot.docs.first.data();
-          if (mounted) {
-            final name = userData['nombre'] ?? user.email ?? '';
-            setState(() {
-              _encargadoCtrl.text = name;
-              _responsableCtrl.text = name;
-            });
-          }
-        } else {
-          if (mounted) {
-            setState(() {
-              _encargadoCtrl.text = user.email ?? '';
-              _responsableCtrl.text = user.email ?? '';
-            });
-          }
-        }
-      } catch (e) {
-        print("Error obteniendo usuario: $e");
-        if (mounted) {
-          setState(() {
-            _encargadoCtrl.text = user.email ?? '';
-            _responsableCtrl.text = user.email ?? '';
-          });
-        }
+      final name = user.displayName ?? user.email ?? '';
+      if (mounted) {
+        setState(() {
+          _encargadoCtrl.text = name;
+        });
       }
     }
   }
@@ -163,6 +126,10 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       final String reportNumber = nextReportNumber.toString().padLeft(4, '0');
       
       final fechaInspeccion = Timestamp.fromDate(_fechaInspeccion);
+      final double? costoEstimado = _parseDouble(_costoEstimadoCtrl.text);
+      final user = FirebaseAuth.instance.currentUser;
+      final responsableNombre = user?.displayName ?? user?.email ?? _encargadoCtrl.text.trim();
+      final responsableUid = user?.uid ?? '';
 
       final productsRef = FirebaseFirestore.instance
           .collection('productos')
@@ -171,49 +138,77 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             toFirestore: (data, _) => data,
           );
 
-      await productsRef
-          .doc(widget.productId)
-          .collection('reportes')
-          .withConverter<Map<String, dynamic>>(
-            fromFirestore: (snapshot, _) => snapshot.data() ?? {},
-            toFirestore: (data, _) => data,
-          )
-          .add({
+      final productRef = productsRef.doc(widget.productId);
+      final productSnap = await productRef.get();
+      final productData = productSnap.data() ?? {};
+      final reportRef = productRef.collection('reportes').doc();
+      final reportData = {
         'nro': reportNumber,
+        'productId': widget.productId,
+        'codigoQR': productData['codigoQR'],
+        'nombreProducto': productData['nombreProducto'] ?? widget.productName,
+        'activo_nombre': widget.productName,
+        'activoNombre': widget.productName,
+        'disciplina': productData['disciplina'],
+        'categoria': productData['categoria'] ?? widget.productCategory,
         'fechaInspeccion': fechaInspeccion,
         'estadoDetectado': _estadoDetectadoCtrl.text.trim(),
         'riesgoElectrico': _riesgoElectricoCtrl.text.trim(),
         'accionRecomendada': _accionRecomendadaCtrl.text.trim(),
-        'costoEstimado': _parseDouble(_costoEstimadoCtrl.text),
-        'responsable': _responsableCtrl.text.trim(),
+        'costoEstimado': costoEstimado,
+        'responsable': responsableNombre,
+        'responsableNombre': responsableNombre,
+        'responsableUid': responsableUid,
+        'encargado': responsableNombre,
         'tipoReporte': _tipoReporteCtrl.text.trim(),
         'descripcion': _descripcionCtrl.text.trim(),
         'comentarios': _comentariosCtrl.text.trim(),
-        'estadoAnterior': widget.initialStatus,
-        'estadoNuevo': _nuevoEstado,
+        'estadoAnterior': widget.initialStatus.toLowerCase(),
+        'estadoNuevo': _nuevoEstado.toLowerCase(),
+        'estadoOperativo': _nuevoEstado.toLowerCase(),
         'reposicion': _reposicion,
         'fechaDisplay': DateFormat('dd/MM/yyyy').format(_fechaInspeccion),
         'ubicacion': widget.productLocation,
-      });
+        'condicionFisica': _condicionFisica,
+        'tipoMantenimiento': _tipoMantenimiento,
+        'nivelCriticidad': _nivelCriticidad,
+        'impactoFalla': _impactoFalla,
+        'riesgoNormativo': _riesgoNormativo,
+        'requiereReemplazo': _requiereReemplazo,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
 
-      final productRef = productsRef.doc(widget.productId);
-      final productSnap = await productRef.get();
-      final productData = productSnap.data() ?? {};
-      final frecuencia = productData['frecuenciaMantenimientoMeses'];
-      final meses = frecuencia is int ? frecuencia : int.tryParse(frecuencia?.toString() ?? '');
-      final fechaProximo = meses != null ? _addMonths(_fechaInspeccion, meses) : null;
+      await reportRef.set(reportData);
+      await FirebaseFirestore.instance
+          .collection('reportes')
+          .doc(reportRef.id)
+          .set(reportData);
+      final frecuencia = _parseFrecuenciaMeses(productData['frecuenciaMantenimientoMeses']);
+      final fechaProximo =
+          frecuencia != null ? _addMonthsDouble(_fechaInspeccion, frecuencia) : null;
 
-      await productRef.update({
+      final updateData = <String, dynamic>{
         'estado': _nuevoEstado.toLowerCase(),
         'estadoOperativo': _nuevoEstado.toLowerCase(),
-        'condicionFisica': _condicionFisicaCtrl.text.trim(),
+        'condicionFisica': _condicionFisica,
+        'tipoMantenimiento': _tipoMantenimiento,
+        'nivelCriticidad': _nivelCriticidad,
+        'impactoFalla': _impactoFalla,
+        'riesgoNormativo': _riesgoNormativo,
+        'requiereReemplazo': _requiereReemplazo,
         'fechaUltimaInspeccion': fechaInspeccion,
-        'fechaProximoMantenimiento': fechaProximo != null ? Timestamp.fromDate(fechaProximo) : null,
-        'nivelCriticidad': _parseInt(_nivelCriticidadCtrl.text),
-        'impactoFalla': _impactoFallaCtrl.text.trim(),
-        'riesgoNormativo': _riesgoNormativoCtrl.text.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (fechaProximo != null) {
+        updateData['fechaProximoMantenimiento'] = Timestamp.fromDate(fechaProximo);
+      }
+      if (costoEstimado != null) {
+        // Acumula el costo de mantenimiento de forma atómica.
+        updateData['costoMantenimiento'] = FieldValue.increment(costoEstimado);
+      }
+
+      await productRef.update(updateData);
 
       if (mounted) {
         Navigator.of(context).pop(); 
@@ -267,7 +262,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               "Bloque: ${widget.productLocation['bloque'] ?? '--'} - Nivel: ${widget.productLocation['nivel'] ?? widget.productLocation['piso'] ?? '--'}",
             ),
             _buildReadOnlyField("Categoría", widget.productCategory),
-            _buildReadOnlyField("Estado Actual", widget.initialStatus),
+            _buildReadOnlyField("Estado Actual", _formatEstadoLabel(widget.initialStatus)),
 
             const SizedBox(height: 12),
             ListTile(
@@ -309,11 +304,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               hint: "EJ: 1500",
               keyboardType: TextInputType.number,
             ),
-            _buildTextField(
-              controller: _responsableCtrl,
-              label: "Responsable",
-              hint: "Nombre del responsable",
-            ),
+            _buildReadOnlyField("Encargado (usuario)", _encargadoCtrl.text),
             
             _buildTextField(
               controller: _descripcionCtrl, // Asignamos controlador
@@ -324,7 +315,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             
             _buildSegmentedControl(
               label: "Estado*",
-              options: const ['OPERATIVO', 'FUERA DE SERVICIO'],
+              options: const ['OPERATIVO', 'DEFECTUOSO', 'FUERA_SERVICIO'],
               value: _nuevoEstado,
               onChanged: (newValue) => setState(() => _nuevoEstado = newValue),
             ),
@@ -336,48 +327,43 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               onChanged: (newValue) => setState(() => _reposicion = newValue),
             ),
 
-            _buildTextField(
-              controller: _condicionFisicaCtrl,
+            _buildDropdownField(
               label: "Condición Física",
-              hint: "EJ: Buena / Regular",
+              value: _condicionFisica,
+              items: const ['buena', 'regular', 'mala'],
+              onChanged: (value) => setState(() => _condicionFisica = value ?? _condicionFisica),
             ),
-            _buildTextField(
-              controller: _nivelCriticidadCtrl,
+            _buildDropdownField(
+              label: "Tipo de Mantenimiento",
+              value: _tipoMantenimiento,
+              items: const ['preventivo', 'correctivo'],
+              onChanged: (value) => setState(() => _tipoMantenimiento = value ?? _tipoMantenimiento),
+            ),
+            _buildDropdownField(
               label: "Nivel de Criticidad",
-              hint: "EJ: 3",
-              keyboardType: TextInputType.number,
+              value: _nivelCriticidad,
+              items: const ['alto', 'medio', 'bajo'],
+              onChanged: (value) => setState(() => _nivelCriticidad = value ?? _nivelCriticidad),
             ),
-            _buildTextField(
-              controller: _impactoFallaCtrl,
+            _buildDropdownField(
               label: "Impacto de Falla",
-              hint: "EJ: Medio",
+              value: _impactoFalla,
+              items: const ['seguridad', 'operacion', 'confort'],
+              onChanged: (value) => setState(() => _impactoFalla = value ?? _impactoFalla),
             ),
-            _buildTextField(
-              controller: _riesgoNormativoCtrl,
+            _buildDropdownField(
               label: "Riesgo Normativo",
-              hint: "EJ: Bajo",
+              value: _riesgoNormativo,
+              items: const ['cumple', 'no_cumple', 'evaluar'],
+              onChanged: (value) => setState(() => _riesgoNormativo = value ?? _riesgoNormativo),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text("Requiere Reemplazo"),
+              value: _requiereReemplazo,
+              onChanged: _isSaving ? null : (value) => setState(() => _requiereReemplazo = value),
             ),
 
-            // Campo Encargado (Ya usaba controller, solo ajustamos el widget)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16.0),
-              child: TextFormField(
-                controller: _encargadoCtrl,
-                decoration: const InputDecoration(
-                  labelText: "Encargado*",
-                  hintText: "Cargando...",
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                  filled: true,
-                  fillColor: Color(0xFFF5F6FA),
-                  suffixIcon: Icon(Icons.lock_outline, size: 16, color: Colors.grey),
-                ),
-                validator: (value) => (value == null || value.isEmpty) ? 'Campo requerido' : null,
-                enabled: !_isSaving, // Bloquear si guarda
-                readOnly: true, // Preferiblemente solo lectura si es automático
-              ),
-            ),
-            
             _buildTextField(
               controller: _comentariosCtrl, // Asignamos controlador
               label: "Acciones Tomadas / Comentarios",
@@ -430,6 +416,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     int maxLines = 1, 
     bool isRequired = true,
     TextInputType? keyboardType,
+    bool readOnly = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
@@ -450,6 +437,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
           return null;
         },
         enabled: !_isSaving,
+        readOnly: readOnly,
       ),
     );
   }
@@ -493,6 +481,16 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     return int.tryParse(trimmed);
   }
 
+  double? _parseFrecuenciaMeses(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    return double.tryParse(value.toString().replaceAll(',', '.'));
+  }
+
   DateTime _addMonths(DateTime date, int months) {
     final newYear = date.year + ((date.month - 1 + months) ~/ 12);
     final newMonth = ((date.month - 1 + months) % 12) + 1;
@@ -500,6 +498,34 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     final lastDay = DateTime(newYear, newMonth + 1, 0).day;
     final newDay = day > lastDay ? lastDay : day;
     return DateTime(newYear, newMonth, newDay);
+  }
+
+  DateTime _addMonthsDouble(DateTime date, double months) {
+    final wholeMonths = months.floor();
+    final fraction = months - wholeMonths;
+    final baseDate = _addMonths(date, wholeMonths);
+    // Aproximamos la fracción del mes usando 30 días.
+    final extraDays = (fraction * 30).round();
+    return baseDate.add(Duration(days: extraDays));
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: DropdownButtonFormField<String>(
+        value: items.contains(value) ? value : items.first,
+        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+        items: items
+            .map((item) => DropdownMenuItem(value: item, child: Text(_formatEstadoLabel(item))))
+            .toList(),
+        onChanged: _isSaving ? null : onChanged,
+      ),
+    );
   }
 
   Widget _buildSegmentedControl({
@@ -542,7 +568,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        option,
+                        _formatEstadoLabel(option),
                         style: TextStyle(
                           color: isSelected ? Colors.white : Colors.black87,
                           fontWeight: FontWeight.bold,
@@ -557,5 +583,16 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         ],
       ),
     );
+  }
+
+  String _formatEstadoLabel(String estado) {
+    final normalized = estado.replaceAll('_', ' ');
+    if (normalized.isEmpty) {
+      return estado;
+    }
+    return normalized
+        .split(' ')
+        .map((word) => word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
   }
 }

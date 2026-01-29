@@ -34,13 +34,44 @@ class ListaReportesPorCategoriaScreen extends StatelessWidget {
               toFirestore: (data, _) => data,
             )
             .where('categoria', isEqualTo: categoriaFilter) // Filtra reportes por categoría
-            .orderBy('fecha', descending: true)
+            .orderBy('fechaInspeccion', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+          if (snapshot.hasError) {
+            final errorMessage = snapshot.error.toString();
+            final needsIndex = errorMessage.contains('failed-precondition') ||
+                errorMessage.contains('requires an index');
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.warning_amber, size: 48, color: Colors.orange),
+                    const SizedBox(height: 12),
+                    Text(
+                      needsIndex
+                          ? 'Falta crear un índice compuesto para reportes por categoría.'
+                          : 'Ocurrió un error al cargar los reportes.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      needsIndex
+                          ? 'Crea un índice con: categoria ASC + fechaInspeccion DESC.'
+                          : errorMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
 
           final docs = snapshot.data!.docs;
 
@@ -106,13 +137,28 @@ class _ReporteListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String estado = reporte['estado_nuevo'] ?? 'Pendiente';
+    final String estado = reporte['estadoOperativo'] ??
+        reporte['estadoNuevo'] ??
+        reporte['estadoDetectado'] ??
+        reporte['estado_nuevo'] ??
+        reporte['estado'] ??
+        'registrado';
     final bool isOk = estado.toLowerCase() == 'operativo' || estado.toLowerCase() == 'completado';
-    final Color statusColor = isOk ? Colors.green : Colors.red;
+    final bool isDefectuoso = estado.toLowerCase() == 'defectuoso';
+    final Color statusColor = isOk
+        ? Colors.green
+        : isDefectuoso
+            ? Colors.orange
+            : Colors.red;
     
     // Fecha
-    final Timestamp? ts = reporte['fecha'];
+    final Timestamp? ts = reporte['fechaInspeccion'] ?? reporte['fecha'];
     final String fecha = ts != null ? DateFormat('dd/MM/yyyy').format(ts.toDate()) : '--';
+    final String accionRecomendada = reporte['accionRecomendada'] ??
+        reporte['accion'] ??
+        reporte['descripcion'] ??
+        reporte['motivo'] ??
+        '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -138,7 +184,10 @@ class _ReporteListCard extends StatelessWidget {
             child: Icon(isOk ? Icons.check : Icons.warning, color: statusColor),
           ),
           title: Text(
-            reporte['activo_nombre'] ?? 'Producto desconocido', 
+            reporte['nombreProducto'] ??
+                reporte['activo_nombre'] ??
+                reporte['activoNombre'] ??
+                'Producto desconocido', 
             style: const TextStyle(fontWeight: FontWeight.bold),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -147,7 +196,7 @@ class _ReporteListCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("N° ${reporte['nro']} • $fecha"),
-              Text(reporte['descripcion'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(accionRecomendada, maxLines: 1, overflow: TextOverflow.ellipsis),
             ],
           ),
           trailing: Column(
@@ -160,7 +209,10 @@ class _ReporteListCard extends StatelessWidget {
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(estado.toUpperCase(), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Text(
+                  _formatEstadoLabel(estado),
+                  style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -168,4 +220,15 @@ class _ReporteListCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatEstadoLabel(String estado) {
+  final normalized = estado.replaceAll('_', ' ');
+  if (normalized.isEmpty) {
+    return estado;
+  }
+  return normalized
+      .split(' ')
+      .map((word) => word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}')
+      .join(' ');
 }

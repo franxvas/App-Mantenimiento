@@ -42,7 +42,18 @@ class ListaProductosScreen extends StatelessWidget {
               ),
             ),
             
-            _buildProductStream('fuera de servicio', context),
+            _buildProductStream(['fuera_servicio', 'fuera de servicio'], 'fuera de servicio', context),
+
+            // --- SECCIÓN: DEFECTUOSO ---
+            const Padding(
+              padding: EdgeInsets.only(top: 30, left: 15, bottom: 5),
+              child: Text(
+                "⚠️ DEFECTUOSO",
+                style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+              ),
+            ),
+
+            _buildProductStream(['defectuoso'], 'defectuoso', context),
             
             // --- SECCIÓN: OPERATIVO ---
             const Padding(
@@ -53,7 +64,7 @@ class ListaProductosScreen extends StatelessWidget {
               ),
             ),
             
-            _buildProductStream('operativo', context),
+            _buildProductStream(['operativo'], 'operativo', context),
             
             const SizedBox(height: 80), // Espacio extra al final para que el FAB no tape contenido
           ],
@@ -76,7 +87,7 @@ class ListaProductosScreen extends StatelessWidget {
   }
 
   // Helper para construir el Stream de Firestore según el estado
-  Widget _buildProductStream(String estado, BuildContext context) {
+  Widget _buildProductStream(List<String> estados, String estadoLabel, BuildContext context) {
     // 1. Construir la consulta base
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance
         .collection('productos')
@@ -92,8 +103,12 @@ class ListaProductosScreen extends StatelessWidget {
       query = query.where('categoria', isEqualTo: filterValue);
     }
     
-    // 3. Aplicar el filtro de estado (operativo / fuera de servicio)
-    query = query.where('estado', isEqualTo: estado);
+    // 3. Aplicar el filtro de estado (operativo / defectuoso / fuera_servicio)
+    if (estados.length == 1) {
+      query = query.where('estado', isEqualTo: estados.first);
+    } else {
+      query = query.where('estado', whereIn: estados);
+    }
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: query.snapshots(),
@@ -110,7 +125,7 @@ class ListaProductosScreen extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
             child: Text(
-              'No hay productos $estado en esta lista.',
+              'No hay productos $estadoLabel en esta lista.',
               style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic),
             ),
           );
@@ -161,8 +176,14 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isOperativo = estado.toLowerCase() == 'operativo';
-    final Color dotColor = isOperativo ? const Color(0xFF2ECC71) : const Color(0xFFE74C3C);
+    final String normalizedEstado = estado.toLowerCase();
+    final bool isOperativo = normalizedEstado == 'operativo';
+    final bool isDefectuoso = normalizedEstado == 'defectuoso';
+    final Color dotColor = isOperativo
+        ? const Color(0xFF2ECC71)
+        : isDefectuoso
+            ? const Color(0xFFF39C12)
+            : const Color(0xFFE74C3C);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
@@ -224,12 +245,18 @@ class _ProductCard extends StatelessWidget {
                       Row(
                         children: [
                           Container(
-                            width: 8, height: 8,
+                            width: 8,
+                            height: 8,
                             decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
                           ),
                           const SizedBox(width: 6),
+                          if (isDefectuoso)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 6),
+                              child: Icon(Icons.warning_amber, size: 14, color: Color(0xFFF39C12)),
+                            ),
                           Text(
-                            estado.toUpperCase(),
+                            _formatEstadoLabel(estado),
                             style: TextStyle(color: dotColor, fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ],
@@ -247,4 +274,15 @@ class _ProductCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatEstadoLabel(String estado) {
+  final normalized = estado.replaceAll('_', ' ');
+  if (normalized.isEmpty) {
+    return estado;
+  }
+  return normalized
+      .split(' ')
+      .map((word) => word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}')
+      .join(' ');
 }

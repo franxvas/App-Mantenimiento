@@ -157,43 +157,45 @@ dynamic valueForHeader(
     case 'Espacio':
       return ubicacion['area'] ?? productData['area'] ?? productData['espacio'] ?? '';
     case 'Estado_Operativo':
-      return productData['estado'] ?? '';
+      return _formatEnum(productData['estadoOperativo'] ?? productData['estado']);
     case 'Condicion_Fisica':
-      return productData['condicionFisica'] ?? '';
+      return _formatEnum(productData['condicionFisica']);
     case 'Observaciones':
       return productData['observaciones'] ?? '';
     case 'Costo_Mantenimiento':
-      return productData['costoMantenimiento'] ?? '';
+      return _formatNumber(productData['costoMantenimiento']);
     case 'Costo_Reemplazo':
-      return productData['costoReemplazo'] ?? '';
+      return _formatNumber(productData['costoReemplazo']);
     case 'Frecuencia_Mantenimiento_Meses':
-      return productData['frecuenciaMantenimientoMeses'] ?? '';
+      return _formatNumber(productData['frecuenciaMantenimientoMeses']);
     case 'Impacto_Falla':
-      return productData['impactoFalla'] ?? '';
+      return _formatEnum(productData['impactoFalla']);
     case 'Riesgo_Normativo':
-      return productData['riesgoNormativo'] ?? '';
+      return _formatEnum(productData['riesgoNormativo']);
     case 'Nivel_Criticidad':
-      return productData['nivelCriticidad'] ?? '';
+      return _formatEnum(productData['nivelCriticidad']);
+    case 'Tipo_Mantenimiento':
+      return _formatEnum(productData['tipoMantenimiento']);
     case 'Fecha_Ultima_Inspeccion':
-      return _formatDate(productData['ultimaInspeccionFecha']);
+      return _formatDate(productData['fechaUltimaInspeccion'] ?? productData['ultimaInspeccionFecha']);
     case 'Fecha_Proximo_Mantenimiento':
       return _formatDate(productData['fechaProximoMantenimiento']);
     case 'Fecha_Instalacion':
       return _formatDate(productData['fechaInstalacion']);
     case 'Vida_Util_Esperada_Anios':
-      return productData['vidaUtilEsperadaAnios'] ?? '';
+      return _formatNumber(productData['vidaUtilEsperadaAnios']);
     case 'Requiere_Reemplazo':
-      return productData['requiereReemplazo'] ?? '';
+      return _formatBool(productData['requiereReemplazo']);
     case 'ID_Reporte':
       return reportDoc?.id ?? '';
     case 'Fecha_Inspeccion':
-      return _formatDate(reportData['fecha']);
+      return _formatDate(reportData['fechaInspeccion'] ?? reportData['fecha']);
     case 'Estado_Detectado':
-      return reportData['estado'] ?? '';
+      return _formatEnum(reportData['estadoDetectado'] ?? reportData['estado']);
     case 'Accion_Recomendada':
-      return reportData['accion'] ?? '';
+      return reportData['accionRecomendada'] ?? reportData['accion'] ?? '';
     case 'Costo_Estimado':
-      return reportData['costo'] ?? '';
+      return _formatNumber(reportData['costoEstimado'] ?? reportData['costo']);
     case 'Responsable':
       return reportData['responsable'] ?? '';
     case 'Riesgo_Electrico':
@@ -211,6 +213,38 @@ String _formatDate(dynamic value) {
     return '';
   }
   return DateFormat('dd/MM/yyyy').format(date);
+}
+
+String _formatEnum(dynamic value) {
+  if (value == null) {
+    return '';
+  }
+  final raw = value.toString();
+  if (raw.isEmpty) {
+    return '';
+  }
+  return raw
+      .replaceAll('_', ' ')
+      .split(' ')
+      .map((word) => word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}')
+      .join(' ');
+}
+
+String _formatBool(dynamic value) {
+  if (value == null) {
+    return '';
+  }
+  if (value is bool) {
+    return value ? 'Sí' : 'No';
+  }
+  return value.toString();
+}
+
+String _formatNumber(dynamic value) {
+  if (value == null) {
+    return '';
+  }
+  return value.toString();
 }
 
 DateTime? _resolveDate(dynamic value) {

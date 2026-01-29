@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Importar Supabase
+import 'package:intl/intl.dart';
 import 'package:appmantflutter/services/parametros_dataset_service.dart';
 import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
@@ -34,18 +35,18 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final _bloqueController = TextEditingController();
   final _espacioController = TextEditingController();
   final _tipoActivoController = TextEditingController();
-  final _condicionFisicaController = TextEditingController();
+  final _idActivoController = TextEditingController();
   final _frecuenciaMantenimientoController = TextEditingController();
   final _costoMantenimientoController = TextEditingController();
   final _costoReemplazoController = TextEditingController();
-  final _observacionesController = TextEditingController();
-  final _nivelCriticidadController = TextEditingController();
-  final _impactoFallaController = TextEditingController();
-  final _riesgoNormativoController = TextEditingController();
+  final _vidaUtilEsperadaController = TextEditingController();
   final Map<String, TextEditingController> _dynamicControllers = {};
 
   String _estado = 'operativo';
+  static const List<String> _estadoOptions = ['operativo', 'defectuoso', 'fuera_servicio'];
   
+  DateTime? _fechaInstalacion;
+
   File? _imageFile; // Archivo local seleccionado
   String? _currentImageUrl; // URL de imagen actual en Firebase/Supabase
 
@@ -62,7 +63,10 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _espacioController.text = widget.initialData['espacio']?.toString() ??
         widget.initialData['ubicacion']?['area']?.toString() ??
         '';
-    _estado = widget.initialData['estado'] ?? 'operativo';
+    final estadoInicial = widget.initialData['estadoOperativo']?.toString().toLowerCase() ??
+        widget.initialData['estado']?.toString().toLowerCase() ??
+        'operativo';
+    _estado = _estadoOptions.contains(estadoInicial) ? estadoInicial : 'operativo';
     // Asumimos que la base de datos guarda la URL COMPLETA ahora
     _currentImageUrl = widget.initialData['imagenUrl']; 
 
@@ -74,15 +78,13 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     }
 
     _tipoActivoController.text = widget.initialData['tipoActivo']?.toString() ?? '';
-    _condicionFisicaController.text = widget.initialData['condicionFisica']?.toString() ?? '';
+    _idActivoController.text = widget.initialData['idActivo']?.toString() ?? '';
     _frecuenciaMantenimientoController.text =
         widget.initialData['frecuenciaMantenimientoMeses']?.toString() ?? '';
     _costoMantenimientoController.text = widget.initialData['costoMantenimiento']?.toString() ?? '';
     _costoReemplazoController.text = widget.initialData['costoReemplazo']?.toString() ?? '';
-    _observacionesController.text = widget.initialData['observaciones']?.toString() ?? '';
-    _nivelCriticidadController.text = widget.initialData['nivelCriticidad']?.toString() ?? '';
-    _impactoFallaController.text = widget.initialData['impactoFalla']?.toString() ?? '';
-    _riesgoNormativoController.text = widget.initialData['riesgoNormativo']?.toString() ?? '';
+    _vidaUtilEsperadaController.text = widget.initialData['vidaUtilEsperadaAnios']?.toString() ?? '';
+    _fechaInstalacion = _resolveDate(widget.initialData['fechaInstalacion']);
   }
 
   @override
@@ -93,14 +95,11 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _bloqueController.dispose();
     _espacioController.dispose();
     _tipoActivoController.dispose();
-    _condicionFisicaController.dispose();
+    _idActivoController.dispose();
     _frecuenciaMantenimientoController.dispose();
     _costoMantenimientoController.dispose();
     _costoReemplazoController.dispose();
-    _observacionesController.dispose();
-    _nivelCriticidadController.dispose();
-    _impactoFallaController.dispose();
-    _riesgoNormativoController.dispose();
+    _vidaUtilEsperadaController.dispose();
     for (final controller in _dynamicControllers.values) {
       controller.dispose();
     }
@@ -177,28 +176,32 @@ Future<String?> _uploadToSupabase() async {
     final schema = disciplinaKey.isNotEmpty ? await _schemaService.fetchSchema(disciplinaKey) : null;
     final attrs = _collectDynamicAttrs(schema?.fields ?? []);
     final topLevelValues = _extractTopLevel(attrs);
+    final productRef = FirebaseFirestore.instance.collection('productos').doc(widget.productId);
+    final currentSnapshot = await productRef.get();
+    final currentData = currentSnapshot.data() ?? <String, dynamic>{};
+    final currentCostoMantenimiento = currentData['costoMantenimiento'];
+    final currentEstadoOperativo = currentData['estadoOperativo'] ?? currentData['estado'] ?? _estado;
 
     final productData = {
       'nombre': _nombreController.text,
+      'nombreProducto': _nombreController.text,
       'descripcion': _descripcionController.text,
-      'estado': _estado,
-      'estadoOperativo': _estado,
+      'estado': currentEstadoOperativo,
+      'estadoOperativo': currentEstadoOperativo,
       'nivel': _nivelController.text,
       'disciplina': disciplinaKey,
       'categoria': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'categoriaActivo': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'subcategoria': widget.initialData['subcategoria'],
       'tipoActivo': _tipoActivoController.text.trim(),
+      'idActivo': _idActivoController.text.trim(),
       'bloque': _bloqueController.text.trim(),
       'espacio': _espacioController.text.trim(),
-      'condicionFisica': _condicionFisicaController.text.trim(),
-      'frecuenciaMantenimientoMeses': _parseInt(_frecuenciaMantenimientoController.text),
-      'costoMantenimiento': _parseDouble(_costoMantenimientoController.text),
+      'frecuenciaMantenimientoMeses': _parseDouble(_frecuenciaMantenimientoController.text),
+      'costoMantenimiento': currentCostoMantenimiento ?? _parseDouble(_costoMantenimientoController.text),
       'costoReemplazo': _parseDouble(_costoReemplazoController.text),
-      'observaciones': _observacionesController.text.trim(),
-      'nivelCriticidad': _parseInt(_nivelCriticidadController.text),
-      'impactoFalla': _impactoFallaController.text.trim(),
-      'riesgoNormativo': _riesgoNormativoController.text.trim(),
+      'fechaInstalacion': _fechaInstalacion,
+      'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaController.text),
       ...topLevelValues,
       'ubicacion': {
         'nivel': _nivelController.text,
@@ -212,7 +215,6 @@ Future<String?> _uploadToSupabase() async {
     }
 
     final columns = await _parametrosSchemaService.fetchColumns(disciplinaKey, 'base');
-    final productRef = FirebaseFirestore.instance.collection('productos').doc(widget.productId);
     await _datasetService.updateProductoWithDataset(
       productRef: productRef,
       productData: productData,
@@ -313,7 +315,7 @@ Future<String?> _uploadToSupabase() async {
             ),
 
             const SizedBox(height: 16),
-            const Text("Parámetros Excel", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text("Datos del Activo", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 10),
             TextFormField(
               controller: _tipoActivoController,
@@ -321,8 +323,8 @@ Future<String?> _uploadToSupabase() async {
             ),
             const SizedBox(height: 12),
             TextFormField(
-              controller: _condicionFisicaController,
-              decoration: const InputDecoration(labelText: 'Condición Física'),
+              controller: _idActivoController,
+              decoration: const InputDecoration(labelText: 'ID Activo'),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -333,8 +335,13 @@ Future<String?> _uploadToSupabase() async {
             const SizedBox(height: 12),
             TextFormField(
               controller: _costoMantenimientoController,
-              decoration: const InputDecoration(labelText: 'Costo Mantenimiento'),
+              decoration: const InputDecoration(
+                labelText: 'Costo Mantenimiento',
+                helperText: 'Se calcula automáticamente desde reportes.',
+                suffixIcon: Icon(Icons.lock_outline, size: 16),
+              ),
               keyboardType: TextInputType.number,
+              readOnly: true,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -344,37 +351,18 @@ Future<String?> _uploadToSupabase() async {
             ),
             const SizedBox(height: 12),
             TextFormField(
-              controller: _observacionesController,
-              decoration: const InputDecoration(labelText: 'Observaciones'),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _nivelCriticidadController,
-              decoration: const InputDecoration(labelText: 'Nivel de Criticidad'),
+              controller: _vidaUtilEsperadaController,
+              decoration: const InputDecoration(labelText: 'Vida Útil Esperada (Años)'),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _impactoFallaController,
-              decoration: const InputDecoration(labelText: 'Impacto de Falla'),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _riesgoNormativoController,
-              decoration: const InputDecoration(labelText: 'Riesgo Normativo'),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.only(top: 12.0),
-              child: DropdownButtonFormField<String>(
-                value: _estado,
-                decoration: const InputDecoration(labelText: 'Estado'),
-                items: const [
-                  DropdownMenuItem(value: 'operativo', child: Text('OPERATIVO')),
-                  DropdownMenuItem(value: 'fuera de servicio', child: Text('FUERA DE SERVICIO')),
-                ],
-                onChanged: (value) => setState(() => _estado = value ?? _estado),
+            ListTile(
+              title: const Text("Fecha Instalación"),
+              subtitle: Text(_formatDate(_fechaInstalacion)),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: () => _selectOptionalDate(
+                initialDate: _fechaInstalacion,
+                onSelected: (date) => setState(() => _fechaInstalacion = date),
               ),
             ),
 
@@ -428,18 +416,16 @@ Future<String?> _uploadToSupabase() async {
       'categoria',
       'categoriaActivo',
       'tipoActivo',
+      'idActivo',
       'subcategoria',
       'descripcion',
       'fechaCompra',
       'estadoOperativo',
-      'condicionFisica',
       'frecuenciaMantenimientoMeses',
       'costoMantenimiento',
       'costoReemplazo',
-      'observaciones',
-      'nivelCriticidad',
-      'impactoFalla',
-      'riesgoNormativo',
+      'fechaInstalacion',
+      'vidaUtilEsperadaAnios',
       'updatedAt',
       'imagenUrl',
     };
@@ -491,6 +477,44 @@ Future<String?> _uploadToSupabase() async {
       return null;
     }
     return double.tryParse(trimmed.replaceAll(',', '.'));
+  }
+
+  DateTime? _resolveDate(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
+
+  String _formatDate(DateTime? value) {
+    if (value == null) {
+      return '--/--/----';
+    }
+    return DateFormat('dd/MM/yyyy').format(value);
+  }
+
+  Future<void> _selectOptionalDate({
+    required DateTime? initialDate,
+    required ValueChanged<DateTime> onSelected,
+  }) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null) {
+      onSelected(picked);
+    }
   }
 
   String _resolveNivel(Map<String, dynamic> data) {
