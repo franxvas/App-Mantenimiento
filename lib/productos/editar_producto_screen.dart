@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:appmantflutter/services/parametros_dataset_service.dart';
 import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
+import 'package:appmantflutter/services/activo_id_helper.dart';
 
 class EditarProductoScreen extends StatefulWidget {
   final String productId;
@@ -36,6 +37,8 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final _espacioController = TextEditingController();
   final _tipoActivoController = TextEditingController();
   final _idActivoController = TextEditingController();
+  String _idActivoPreview = '';
+  String _idActivoCorrelativo = '000';
   final _frecuenciaMantenimientoController = TextEditingController();
   final _costoMantenimientoController = TextEditingController();
   final _costoReemplazoController = TextEditingController();
@@ -46,6 +49,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   static const List<String> _estadoOptions = ['operativo', 'defectuoso', 'fuera_servicio'];
   
   DateTime? _fechaInstalacion;
+  late final String _disciplinaKey;
 
   File? _imageFile; // Archivo local seleccionado
   String? _currentImageUrl; // URL de imagen actual en Firebase/Supabase
@@ -71,6 +75,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _currentImageUrl = widget.initialData['imagenUrl']; 
 
     _parametrosSchemaService.seedSchemasIfMissing();
+    _disciplinaKey = _resolveDisciplinaKey(widget.initialData);
 
     final attrs = widget.initialData['attrs'] as Map<String, dynamic>? ?? {};
     for (final entry in attrs.entries) {
@@ -79,12 +84,15 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
 
     _tipoActivoController.text = widget.initialData['tipoActivo']?.toString() ?? '';
     _idActivoController.text = widget.initialData['idActivo']?.toString() ?? '';
+    _idActivoCorrelativo =
+        ActivoIdHelper.extractCorrelativo(_idActivoController.text) ?? _idActivoCorrelativo;
     _frecuenciaMantenimientoController.text =
         widget.initialData['frecuenciaMantenimientoMeses']?.toString() ?? '';
     _costoMantenimientoController.text = widget.initialData['costoMantenimiento']?.toString() ?? '';
     _costoReemplazoController.text = widget.initialData['costoReemplazo']?.toString() ?? '';
     _vidaUtilEsperadaController.text = widget.initialData['vidaUtilEsperadaAnios']?.toString() ?? '';
     _fechaInstalacion = _resolveDate(widget.initialData['fechaInstalacion']);
+    _updateIdActivoPreview();
   }
 
   @override
@@ -172,7 +180,7 @@ Future<String?> _uploadToSupabase() async {
     }
 
     // 2. Actualizar el documento en Firestore
-    final disciplinaKey = _resolveDisciplinaKey(widget.initialData);
+    final disciplinaKey = _disciplinaKey;
     final schema = disciplinaKey.isNotEmpty ? await _schemaService.fetchSchema(disciplinaKey) : null;
     final attrs = _collectDynamicAttrs(schema?.fields ?? []);
     final topLevelValues = _extractTopLevel(attrs);
@@ -182,6 +190,13 @@ Future<String?> _uploadToSupabase() async {
     final currentCostoMantenimiento = currentData['costoMantenimiento'];
     final currentEstadoOperativo = currentData['estadoOperativo'] ?? currentData['estado'] ?? _estado;
 
+    final idActivo = ActivoIdHelper.buildId(
+      disciplinaKey: disciplinaKey,
+      nombre: _nombreController.text.trim(),
+      bloque: _bloqueController.text.trim(),
+      nivel: _nivelController.text.trim(),
+      correlativo: _idActivoCorrelativo,
+    );
     final productData = {
       'nombre': _nombreController.text,
       'nombreProducto': _nombreController.text,
@@ -194,7 +209,8 @@ Future<String?> _uploadToSupabase() async {
       'categoriaActivo': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'subcategoria': widget.initialData['subcategoria'],
       'tipoActivo': _tipoActivoController.text.trim(),
-      'idActivo': _idActivoController.text.trim(),
+      // Si ya existía un correlativo, solo recalculamos el prefijo para mantener el ID estable.
+      'idActivo': idActivo,
       'bloque': _bloqueController.text.trim(),
       'espacio': _espacioController.text.trim(),
       'frecuenciaMantenimientoMeses': _parseDouble(_frecuenciaMantenimientoController.text),
@@ -202,6 +218,7 @@ Future<String?> _uploadToSupabase() async {
       'costoReemplazo': _parseDouble(_costoReemplazoController.text),
       'fechaInstalacion': _fechaInstalacion,
       'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaController.text),
+      'codigoQR': idActivo,
       ...topLevelValues,
       'ubicacion': {
         'nivel': _nivelController.text,
@@ -290,6 +307,7 @@ Future<String?> _uploadToSupabase() async {
             TextFormField(
               controller: _nombreController,
               decoration: const InputDecoration(labelText: 'Nombre del Producto'),
+              onChanged: (_) => _updateIdActivoPreview(),
               validator: (v) => v!.isEmpty ? 'Ingrese un nombre' : null,
             ),
             
@@ -302,11 +320,13 @@ Future<String?> _uploadToSupabase() async {
             TextFormField(
               controller: _bloqueController,
               decoration: const InputDecoration(labelText: 'Bloque'),
+              onChanged: (_) => _updateIdActivoPreview(),
             ),
 
             TextFormField(
               controller: _nivelController,
               decoration: const InputDecoration(labelText: 'Nivel'),
+              onChanged: (_) => _updateIdActivoPreview(),
             ),
 
             TextFormField(
@@ -324,7 +344,27 @@ Future<String?> _uploadToSupabase() async {
             const SizedBox(height: 12),
             TextFormField(
               controller: _idActivoController,
-              decoration: const InputDecoration(labelText: 'ID Activo'),
+              decoration: const InputDecoration(
+                labelText: 'ID Activo',
+                helperText: 'Se autogenera. El correlativo no cambia al editar.',
+              ),
+              readOnly: true,
+              enabled: false,
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.visibility, size: 18, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'ID Activo (previsualización): $_idActivoPreview',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -366,25 +406,6 @@ Future<String?> _uploadToSupabase() async {
               ),
             ),
 
-            StreamBuilder<SchemaSnapshot?>(
-              stream: _schemaService.streamSchema(widget.initialData['disciplina'] ?? ''),
-              builder: (context, snapshot) {
-                final schema = snapshot.data;
-                if (schema == null) {
-                  return const SizedBox.shrink();
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 20),
-                    const Text("Campos de Parámetros", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                    const SizedBox(height: 10),
-                    ..._buildDynamicFields(schema.fields),
-                  ],
-                );
-              },
-            ),
-            
             const SizedBox(height: 30),
 
             ElevatedButton(
@@ -401,52 +422,18 @@ Future<String?> _uploadToSupabase() async {
     );
   }
 
-  List<Widget> _buildDynamicFields(List<SchemaField> fields) {
-    final excluded = <String>{
-      'id',
-      'idActivo',
-      'nombre',
-      'estado',
-      'piso',
-      'nivel',
-      'bloque',
-      'area',
-      'espacio',
-      'disciplina',
-      'categoria',
-      'categoriaActivo',
-      'tipoActivo',
-      'idActivo',
-      'subcategoria',
-      'descripcion',
-      'fechaCompra',
-      'estadoOperativo',
-      'frecuenciaMantenimientoMeses',
-      'fechaUltimaInspeccion',
-      'fechaProximoMantenimiento',
-      'costoMantenimiento',
-      'costoReemplazo',
-      'fechaInstalacion',
-      'vidaUtilEsperadaAnios',
-      'updatedAt',
-      'imagenUrl',
-    };
-
-    return fields.where((field) => !excluded.contains(field.key)).map((field) {
-      final controller = _dynamicControllers.putIfAbsent(
-        field.key,
-        () => TextEditingController(),
-      );
-      final isNumber = field.type.toLowerCase() == 'number';
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: TextFormField(
-          controller: controller,
-          decoration: InputDecoration(labelText: field.displayName),
-          keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-        ),
-      );
-    }).toList();
+  void _updateIdActivoPreview() {
+    final preview = ActivoIdHelper.buildPreview(
+      disciplinaKey: _disciplinaKey,
+      nombre: _nombreController.text.trim(),
+      bloque: _bloqueController.text.trim(),
+      nivel: _nivelController.text.trim(),
+      correlativo: _idActivoCorrelativo,
+    );
+    setState(() {
+      _idActivoPreview = preview;
+      _idActivoController.text = preview;
+    });
   }
 
   Map<String, dynamic> _collectDynamicAttrs(List<SchemaField> fields) {

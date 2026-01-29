@@ -9,7 +9,8 @@ import 'package:appmantflutter/services/schema_service.dart';
 import 'package:appmantflutter/reportes/generar_reporte_screen.dart'; 
 import 'package:appmantflutter/productos/editar_producto_screen.dart'; 
 import 'package:appmantflutter/services/pdf_service.dart'; 
-import 'package:appmantflutter/reportes/detalle_reporte_screen.dart'; // <--- NUEVA IMPORTACIÓN NECESARIA
+import 'package:appmantflutter/productos/reportes_del_producto_screen.dart';
+import 'package:appmantflutter/reportes/reporte_card.dart';
 
 class DetalleProductoScreen extends StatelessWidget {
   final String productId;
@@ -128,9 +129,9 @@ class DetalleProductoScreen extends StatelessWidget {
           final String codigoQR = (data['codigoQR'] ?? attrs['codigoQR'] ?? '').toString(); 
           final String disciplina = data['disciplina'] ?? '';
 
-          final Timestamp? tsCompra = data['fechaCompra'];
-          final String fechaCompra = tsCompra != null
-              ? DateFormat('dd/MM/yyyy').format(tsCompra.toDate())
+          final Timestamp? tsInstalacion = data['fechaInstalacion'];
+          final String fechaInstalacion = tsInstalacion != null
+              ? DateFormat('dd/MM/yyyy').format(tsInstalacion.toDate())
               : '--/--/----';
 
           return SingleChildScrollView(
@@ -183,7 +184,11 @@ class DetalleProductoScreen extends StatelessWidget {
                       _DetailRow(icon: FontAwesomeIcons.gears, label: "Disciplina", value: data['disciplinaDisplay'] ?? data['disciplina'] ?? '--'),
                       _DetailRow(icon: FontAwesomeIcons.shapes, label: "Categoría", value: productCategory),
                       _DetailRow(icon: FontAwesomeIcons.layerGroup, label: "Subcategoría", value: data['subcategoria'] ?? '--'),
-                      _DetailRow(icon: FontAwesomeIcons.calendarDay, label: "Fecha de Compra", value: fechaCompra),
+                      _DetailRow(
+                        icon: FontAwesomeIcons.calendarDay,
+                        label: "Fecha de Instalación",
+                        value: fechaInstalacion,
+                      ),
                     ],
                   ),
                 ),
@@ -223,7 +228,11 @@ class DetalleProductoScreen extends StatelessWidget {
                 ),
                 
                 // Lista de Reportes
-                _buildReportsList(productId),
+                _buildReportsList(
+                  context: context,
+                  productId: productId,
+                  productName: productName,
+                ),
 
                 const SizedBox(height: 100),
               ],
@@ -331,7 +340,11 @@ class DetalleProductoScreen extends StatelessWidget {
     );
   }
   
-  Widget _buildReportsList(String productId) {
+  Widget _buildReportsList({
+    required BuildContext context,
+    required String productId,
+    required String productName,
+  }) {
     final productRef = FirebaseFirestore.instance
         .collection('productos')
         .withConverter<Map<String, dynamic>>(
@@ -371,19 +384,46 @@ class DetalleProductoScreen extends StatelessWidget {
                   child: Text('Este equipo no tiene reportes registrados.', textAlign: TextAlign.center),
                 );
               }
-              
+
+              final sortedReports = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(reports)
+                ..sort((a, b) {
+                  final dateA = _resolveReportDate(a.data());
+                  final dateB = _resolveReportDate(b.data());
+                  return dateB.compareTo(dateA);
+                });
+              final visibleReports = sortedReports.take(4).toList();
+              final hasMore = sortedReports.length > 4;
+
               return ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: reports.length,
+                itemCount: visibleReports.length + (hasMore ? 1 : 0),
                 itemBuilder: (context, index) {
-                  final reportDoc = reports[index]; // Documento completo
+                  if (hasMore && index == visibleReports.length) {
+                    return Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ReportesDelProductoScreen(
+                                productId: productId,
+                                nombreProducto: productName,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Ver todos'),
+                      ),
+                    );
+                  }
+
+                  final reportDoc = visibleReports[index];
                   final reportData = reportDoc.data();
-                  
-                  // Pasamos el ID del documento para la navegación
-                  return _ReportCard(
+                  return ReportCard(
                     reporte: reportData,
-                    reportId: reportDoc.id, 
+                    reportId: reportDoc.id,
                     productId: productId,
                   );
                 },
@@ -394,6 +434,20 @@ class DetalleProductoScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+DateTime _resolveReportDate(Map<String, dynamic> data) {
+  final dynamic rawDate = data['fechaInspeccion'] ?? data['fecha'];
+  if (rawDate is Timestamp) {
+    return rawDate.toDate();
+  }
+  if (rawDate is DateTime) {
+    return rawDate;
+  }
+  if (rawDate is String) {
+    return DateTime.tryParse(rawDate) ?? DateTime.fromMillisecondsSinceEpoch(0);
+  }
+  return DateTime.fromMillisecondsSinceEpoch(0);
 }
 
 List<Widget> _buildDynamicDetails(
@@ -454,88 +508,3 @@ class _DetailRow extends StatelessWidget {
 }
 
 // TARJETA CLIQUEABLE DEL REPORTE
-class _ReportCard extends StatelessWidget {
-    final Map<String, dynamic> reporte;
-    final String reportId; // ID necesario para navegar
-    final String productId;
-
-    const _ReportCard({
-      required this.reporte,
-      required this.reportId,
-      required this.productId,
-      super.key,
-    });
-
-    @override
-    Widget build(BuildContext context) {
-        final String estadoDisplay = reporte['estado_nuevo'] ?? reporte['estado'] ?? 'Pendiente';
-        final bool isCompleted = estadoDisplay.toLowerCase() == 'completado' || estadoDisplay.toLowerCase() == 'operativo';
-        
-        final Color badgeColor = isCompleted ? const Color(0xFFD4EDDA) : const Color(0xFFF8D7DA);
-        final Color textColor = isCompleted ? const Color(0xFF155724) : const Color(0xFF721C24);
-        
-        final String fechaDisplay = reporte['fechaDisplay'] ?? DateFormat('dd/MM/yyyy').format((reporte['fecha'] as Timestamp?)?.toDate() ?? DateTime.now());
-
-        // ENVOLVEMOS EN INKWELL O GESTURE DETECTOR PARA NAVEGAR
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.only(bottom: 10),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(4),
-            onTap: () {
-              // Navegar a la pantalla de Detalle de Reporte
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => DetalleReporteScreen(
-                    reportId: reportId,
-                    productId: productId,
-                    initialReportData: reporte,
-                  ),
-                ),
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(15.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text("Reporte N° ${reporte['nro'] ?? '0000'}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF3498DB))),
-                      Text(fechaDisplay, style: const TextStyle(fontSize: 14, color: Color(0xFF777777))),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text("Responsable: ${reporte['responsable'] ?? 'N/A'}", style: const TextStyle(fontSize: 15, color: Color(0xFF555555))),
-                  Text("Motivo: ${reporte['descripcion'] ?? reporte['motivo'] ?? 'Sin descripción.'}", style: const TextStyle(fontSize: 15, color: Color(0xFF555555))),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: badgeColor,
-                      ),
-                      child: Row( // Añadimos un icono pequeño
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            estadoDisplay,
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: textColor),
-                          ),
-                          const SizedBox(width: 5),
-                          const Icon(Icons.chevron_right, size: 14, color: Colors.grey)
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-    }
-}

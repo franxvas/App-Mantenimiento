@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:appmantflutter/services/date_utils.dart';
 
 class GenerarReporteScreen extends StatefulWidget {
   final String productId;
@@ -185,7 +186,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
           .set(reportData);
       final frecuencia = _parseFrecuenciaMeses(productData['frecuenciaMantenimientoMeses']);
       final fechaProximo =
-          frecuencia != null ? _addMonthsDouble(_fechaInspeccion, frecuencia) : null;
+          frecuencia != null ? addMonthsDouble(_fechaInspeccion, frecuencia) : null;
 
       final updateData = <String, dynamic>{
         'estado': _nuevoEstado.toLowerCase(),
@@ -489,24 +490,6 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       return value.toDouble();
     }
     return double.tryParse(value.toString().replaceAll(',', '.'));
-  }
-
-  DateTime _addMonths(DateTime date, int months) {
-    final newYear = date.year + ((date.month - 1 + months) ~/ 12);
-    final newMonth = ((date.month - 1 + months) % 12) + 1;
-    final day = date.day;
-    final lastDay = DateTime(newYear, newMonth + 1, 0).day;
-    final newDay = day > lastDay ? lastDay : day;
-    return DateTime(newYear, newMonth, newDay);
-  }
-
-  DateTime _addMonthsDouble(DateTime date, double months) {
-    final wholeMonths = months.floor();
-    final fraction = months - wholeMonths;
-    final baseDate = _addMonths(date, wholeMonths);
-    // Aproximamos la fracción del mes usando 30 días.
-    final extraDays = (fraction * 30).round();
-    return baseDate.add(Duration(days: extraDays));
   }
 
   Widget _buildDropdownField({

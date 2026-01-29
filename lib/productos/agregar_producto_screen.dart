@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:appmantflutter/services/parametros_dataset_service.dart';
 import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
+import 'package:appmantflutter/services/activo_id_helper.dart';
 
 class AgregarProductoScreen extends StatefulWidget {
   const AgregarProductoScreen({super.key});
@@ -33,6 +34,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   final _areaCtrl = TextEditingController();
   final _tipoActivoCtrl = TextEditingController();
   final _idActivoCtrl = TextEditingController();
+  String _idActivoPreview = '';
   final _frecuenciaMantenimientoCtrl = TextEditingController();
   final _costoReemplazoCtrl = TextEditingController();
   final _vidaUtilEsperadaCtrl = TextEditingController();
@@ -51,8 +53,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   String _riesgoNormativo = 'cumple';
   bool _requiereReemplazo = false;
   
-  DateTime _fechaCompra = DateTime.now();
-  DateTime? _fechaInstalacion;
+  DateTime _fechaInstalacion = DateTime.now();
+  bool _fechaInstalacionCustom = false;
   File? _imageFile;
 
   @override
@@ -77,6 +79,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   void initState() {
     super.initState();
     _parametrosSchemaService.seedSchemasIfMissing();
+    _updateIdActivoPreview();
   }
 
   // --- 1. SELECCIONAR IMAGEN ---
@@ -119,11 +122,15 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       // Generar el código QR de manera automática y atómica.
       final disciplinaKey = _disciplina.toLowerCase();
       final int activoCounter = await _getAndIncrementActivoCounter(disciplinaKey);
-      final String codigoQr = _buildCodigoQr(
-        counter: activoCounter,
+      final correlativo = ActivoIdHelper.formatCorrelativo(activoCounter);
+      final String idActivo = ActivoIdHelper.buildId(
         disciplinaKey: disciplinaKey,
         nombre: _nombreCtrl.text.trim(),
+        bloque: _bloqueCtrl.text.trim(),
+        nivel: _nivelCtrl.text.trim(),
+        correlativo: correlativo,
       );
+      final String codigoQr = idActivo;
 
       // B. Guardar documento
       final schema = await _schemaService.fetchSchema(_disciplina.toLowerCase());
@@ -142,18 +149,17 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'subcategoria': _subcategoria,
         'estado': _estado,
         'estadoOperativo': _estado,
-        'fechaCompra': _fechaCompra, // Se guarda como Timestamp
+        'fechaInstalacion': _fechaInstalacionCustom ? _fechaInstalacion : FieldValue.serverTimestamp(),
         'fechaCreacion': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'nivel': nivelValue,
         'tipoActivo': _tipoActivoCtrl.text.trim(),
-        'idActivo': _idActivoCtrl.text.trim(),
+        'idActivo': idActivo,
         'bloque': _bloqueCtrl.text.trim(),
         'espacio': _areaCtrl.text.trim(),
         'frecuenciaMantenimientoMeses': _parseDouble(_frecuenciaMantenimientoCtrl.text),
         'costoMantenimiento': 0.0,
         'costoReemplazo': _parseDouble(_costoReemplazoCtrl.text),
-        'fechaInstalacion': _fechaInstalacion,
         'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaCtrl.text),
         ...topLevelValues,
         'codigoQR': codigoQr,
@@ -187,17 +193,18 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     }
   }
 
-  // Selector de Fecha
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _fechaCompra,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
+  void _updateIdActivoPreview() {
+    final disciplinaKey = _disciplina.toLowerCase();
+    final preview = ActivoIdHelper.buildPreview(
+      disciplinaKey: disciplinaKey,
+      nombre: _nombreCtrl.text.trim(),
+      bloque: _bloqueCtrl.text.trim(),
+      nivel: _nivelCtrl.text.trim(),
     );
-    if (picked != null && picked != _fechaCompra) {
-      setState(() => _fechaCompra = picked);
-    }
+    setState(() {
+      _idActivoPreview = preview;
+      _idActivoCtrl.text = preview;
+    });
   }
 
   @override
@@ -238,23 +245,71 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
               _buildTextField(_nombreCtrl, "Nombre del Equipo"),
               
               // Dropdowns simples para categorías (puedes hacerlos más complejos si quieres)
-              _buildDropdown("Disciplina", _disciplina, ['Electricas', 'Sanitarias', 'Estructuras', 'Arquitectura'], (v) => setState(() => _disciplina = v!)),
+              _buildDropdown(
+                "Disciplina",
+                _disciplina,
+                ['Electricas', 'Sanitarias', 'Estructuras', 'Arquitectura'],
+                (v) {
+                  _disciplina = v!;
+                  _updateIdActivoPreview();
+                },
+              ),
               _buildDropdown("Categoría", _categoria, ['luminarias', 'tableros', 'bombas', 'otros'], (v) => setState(() => _categoria = v!)),
-              _buildTextField(null, "Subcategoría (Escribir manual)", isManual: true, onChanged: (val) => _subcategoria = val),
+              _buildTextField(
+                null,
+                "Subcategoría (Escribir manual)",
+                isManual: true,
+                onChanged: (val) => _subcategoria = val,
+              ),
               
               const SizedBox(height: 20),
               const Text("Ubicación", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               Row(children: [
-                Expanded(child: _buildTextField(_bloqueCtrl, "Bloque")),
+                Expanded(
+                  child: _buildTextField(
+                    _bloqueCtrl,
+                    "Bloque",
+                    onChanged: (_) => _updateIdActivoPreview(),
+                  ),
+                ),
                 const SizedBox(width: 10),
-                Expanded(child: _buildTextField(_nivelCtrl, "Nivel")),
+                Expanded(
+                  child: _buildTextField(
+                    _nivelCtrl,
+                    "Nivel",
+                    onChanged: (_) => _updateIdActivoPreview(),
+                  ),
+                ),
               ]),
               _buildTextField(_areaCtrl, "Espacio"),
 
               const SizedBox(height: 20),
               const Text("Datos del Activo", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               const SizedBox(height: 10),
-              _buildTextField(_idActivoCtrl, "ID Activo"),
+              TextFormField(
+                controller: _idActivoCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'ID Activo',
+                  helperText: 'Se autogenera al guardar. Previsualización abajo.',
+                ),
+                readOnly: true,
+                enabled: false,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.visibility, size: 18, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'ID Activo (previsualización): $_idActivoPreview',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               _buildTextField(_tipoActivoCtrl, "Tipo de Activo"),
               _buildTextField(_frecuenciaMantenimientoCtrl, "Frecuencia Mantenimiento (meses)", keyboardType: TextInputType.number),
               _buildTextField(_costoReemplazoCtrl, "Costo Reemplazo", keyboardType: TextInputType.number),
@@ -262,20 +317,15 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
               const SizedBox(height: 20),
               ListTile(
-                title: const Text("Fecha de Compra"),
-                subtitle: Text(DateFormat('dd/MM/yyyy').format(_fechaCompra)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () => _selectDate(context),
-              ),
-              ListTile(
-                title: const Text("Fecha Instalación"),
-                subtitle: Text(_fechaInstalacion != null
-                    ? DateFormat('dd/MM/yyyy').format(_fechaInstalacion!)
-                    : '--/--/----'),
+                title: const Text("Fecha de Instalación"),
+                subtitle: Text(DateFormat('dd/MM/yyyy').format(_fechaInstalacion)),
                 trailing: const Icon(Icons.calendar_today),
                 onTap: () => _selectOptionalDate(
                   initialDate: _fechaInstalacion,
-                  onSelected: (date) => setState(() => _fechaInstalacion = date),
+                  onSelected: (date) => setState(() {
+                    _fechaInstalacion = date;
+                    _fechaInstalacionCustom = true;
+                  }),
                 ),
               ),
 
@@ -290,12 +340,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                   }
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 20),
-                      const Text("Campos de Parámetros", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      const SizedBox(height: 10),
-                      ..._buildDynamicFields(schema.fields),
-                    ],
+                    children: _buildDynamicFields(schema.fields),
                   );
                 },
               ),
@@ -326,7 +371,14 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       child: TextFormField(
         controller: ctrl,
         maxLines: maxLines,
-        onChanged: onChanged,
+        onChanged: (value) {
+          if (onChanged != null) {
+            onChanged(value);
+          }
+          if (ctrl == _nombreCtrl || ctrl == _bloqueCtrl || ctrl == _nivelCtrl) {
+            _updateIdActivoPreview();
+          }
+        },
         keyboardType: keyboardType,
         initialValue: isManual && ctrl == null ? _subcategoria : null, // Para el caso manual simple
         decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
@@ -496,83 +548,4 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     });
   }
 
-  String _buildCodigoQr({
-    required int counter,
-    required String disciplinaKey,
-    required String nombre,
-  }) {
-    final disciplinaCode = _disciplinaCodeMap[disciplinaKey] ?? 'GEN';
-    final firstWord = _extractFirstWord(nombre);
-    final padded = counter.toString().padLeft(4, '0');
-    return 'A-$padded-$disciplinaCode-$firstWord-$padded';
-  }
-
-  String _extractFirstWord(String nombre) {
-    final normalized = _removeDiacritics(nombre.trim());
-    final parts = normalized.split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) {
-      return 'ACTIVO';
-    }
-    final sanitized = parts.first.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    return sanitized.isEmpty ? 'ACTIVO' : sanitized;
-  }
-
-  String _removeDiacritics(String input) {
-    const replacements = {
-      'á': 'a',
-      'à': 'a',
-      'ä': 'a',
-      'â': 'a',
-      'Á': 'A',
-      'À': 'A',
-      'Ä': 'A',
-      'Â': 'A',
-      'é': 'e',
-      'è': 'e',
-      'ë': 'e',
-      'ê': 'e',
-      'É': 'E',
-      'È': 'E',
-      'Ë': 'E',
-      'Ê': 'E',
-      'í': 'i',
-      'ì': 'i',
-      'ï': 'i',
-      'î': 'i',
-      'Í': 'I',
-      'Ì': 'I',
-      'Ï': 'I',
-      'Î': 'I',
-      'ó': 'o',
-      'ò': 'o',
-      'ö': 'o',
-      'ô': 'o',
-      'Ó': 'O',
-      'Ò': 'O',
-      'Ö': 'O',
-      'Ô': 'O',
-      'ú': 'u',
-      'ù': 'u',
-      'ü': 'u',
-      'û': 'u',
-      'Ú': 'U',
-      'Ù': 'U',
-      'Ü': 'U',
-      'Û': 'U',
-      'ñ': 'n',
-      'Ñ': 'N',
-    };
-    var output = input;
-    replacements.forEach((key, value) {
-      output = output.replaceAll(key, value);
-    });
-    return output;
-  }
-
-  static const Map<String, String> _disciplinaCodeMap = {
-    'electricas': 'ELECT',
-    'sanitarias': 'SAN',
-    'arquitectura': 'ARQ',
-    'estructuras': 'EST',
-  };
 }

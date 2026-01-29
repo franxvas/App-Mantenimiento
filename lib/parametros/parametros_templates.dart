@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:appmantflutter/services/date_utils.dart';
 
 const Map<String, Map<String, List<String>>> parametrosHeaders = {
   'electricas': {
@@ -143,7 +144,7 @@ dynamic valueForHeader(
 
   switch (header) {
     case 'ID_Activo':
-      return productDoc.id;
+      return productData['idActivo'] ?? productDoc.id;
     case 'Disciplina':
       return productData['disciplina'] ?? '';
     case 'Categoria_Activo':
@@ -179,7 +180,13 @@ dynamic valueForHeader(
     case 'Fecha_Ultima_Inspeccion':
       return _formatDate(productData['fechaUltimaInspeccion'] ?? productData['ultimaInspeccionFecha']);
     case 'Fecha_Proximo_Mantenimiento':
-      return _formatDate(productData['fechaProximoMantenimiento']);
+      return _formatDate(
+        _resolveNextMaintenanceDate(
+          fechaProximoMantenimiento: productData['fechaProximoMantenimiento'],
+          fechaUltimaInspeccion: productData['fechaUltimaInspeccion'] ?? productData['ultimaInspeccionFecha'],
+          frecuenciaMantenimientoMeses: productData['frecuenciaMantenimientoMeses'],
+        ),
+      );
     case 'Fecha_Instalacion':
       return _formatDate(productData['fechaInstalacion']);
     case 'Vida_Util_Esperada_Anios':
@@ -261,4 +268,31 @@ DateTime? _resolveDate(dynamic value) {
     return DateTime.tryParse(value);
   }
   return null;
+}
+
+DateTime? _resolveNextMaintenanceDate({
+  required dynamic fechaProximoMantenimiento,
+  required dynamic fechaUltimaInspeccion,
+  required dynamic frecuenciaMantenimientoMeses,
+}) {
+  final fechaProximo = _resolveDate(fechaProximoMantenimiento);
+  if (fechaProximo != null) {
+    return fechaProximo;
+  }
+  final fechaUltima = _resolveDate(fechaUltimaInspeccion);
+  final frecuencia = _resolveDouble(frecuenciaMantenimientoMeses);
+  if (fechaUltima == null || frecuencia == null) {
+    return null;
+  }
+  return addMonthsDouble(fechaUltima, frecuencia);
+}
+
+double? _resolveDouble(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is num) {
+    return value.toDouble();
+  }
+  return double.tryParse(value.toString().replaceAll(',', '.'));
 }
