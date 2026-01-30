@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:supabase_flutter/supabase_flutter.dart'; // Importar Supabase
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:appmantflutter/services/parametros_dataset_service.dart';
 import 'package:appmantflutter/services/parametros_schema_service.dart';
@@ -29,9 +29,10 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final _parametrosSchemaService = ParametrosSchemaService();
   final _datasetService = ParametrosDatasetService();
   
-  // Controllers
   final _nombreController = TextEditingController();
   final _descripcionController = TextEditingController();
+  final _marcaController = TextEditingController();
+  final _serieController = TextEditingController();
   final _nivelController = TextEditingController();
   final _bloqueController = TextEditingController();
   final _espacioController = TextEditingController();
@@ -49,15 +50,18 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   DateTime? _fechaInstalacion;
   late final String _disciplinaKey;
 
-  File? _imageFile; // Archivo local seleccionado
-  String? _currentImageUrl; // URL de imagen actual en Firebase/Supabase
+  File? _imageFile;
+  String? _currentImageUrl;
 
   @override
   void initState() {
     super.initState();
-    // Precargar datos iniciales
     _nombreController.text = widget.initialData['nombre'] ?? '';
     _descripcionController.text = widget.initialData['descripcion'] ?? '';
+    _marcaController.text = widget.initialData['marca']?.toString() ??
+        (widget.initialData['attrs']?['marca']?.toString() ?? '');
+    _serieController.text = widget.initialData['serie']?.toString() ??
+        (widget.initialData['attrs']?['serie']?.toString() ?? '');
     _nivelController.text = _resolveNivel(widget.initialData);
     _bloqueController.text = widget.initialData['bloque']?.toString() ??
         widget.initialData['ubicacion']?['bloque']?.toString() ??
@@ -69,7 +73,6 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
         widget.initialData['estado']?.toString().toLowerCase() ??
         'operativo';
     _estado = _estadoOptions.contains(estadoInicial) ? estadoInicial : 'operativo';
-    // Asumimos que la base de datos guarda la URL COMPLETA ahora
     _currentImageUrl = widget.initialData['imagenUrl']; 
 
     _parametrosSchemaService.seedSchemasIfMissing();
@@ -96,6 +99,8 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   void dispose() {
     _nombreController.dispose();
     _descripcionController.dispose();
+    _marcaController.dispose();
+    _serieController.dispose();
     _nivelController.dispose();
     _bloqueController.dispose();
     _espacioController.dispose();
@@ -110,7 +115,6 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     super.dispose();
   }
 
-  // --- FUNCIÓN CLAVE: SELECCIONAR IMAGEN ---
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -122,42 +126,35 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     }
   }
 
-  // --- FUNCIÓN CLAVE: SUBIR A SUPABASE STORAGE Y OBTENER URL ---
-// En lib/productos/editar_producto_screen.dart
 
-// --- FUNCIÓN CLAVE: SUBIR A SUPABASE STORAGE Y OBTENER URL ---
 Future<String?> _uploadToSupabase() async {
-  if (_imageFile == null) return _currentImageUrl; // No hay nuevo archivo, retorna URL actual
+  if (_imageFile == null) return _currentImageUrl;
 
   final supabase = Supabase.instance.client;
   final fileExtension = _imageFile!.path.split('.').last;
   final timestamp = DateTime.now().millisecondsSinceEpoch;
   final fileName = 'productos/${widget.productId}-$timestamp.$fileExtension';  
   try {
-    // 1. Subir el archivo (Este paso sí puede fallar y lo envolvemos en try/catch)
     await supabase.storage
-        .from('AppMant') // Nombre del bucket (Debe existir en Supabase)
+        .from('AppMant')
         .upload(
-          fileName, // Usamos la ruta completa (productos/...)
+          fileName,
           _imageFile!,
           fileOptions: const FileOptions(contentType: 'image/jpeg'),
         );
     
-    // 2. Obtener la URL pública: La función getPublicUrl devuelve el string de la URL directamente.
     final String publicUrl = supabase.storage
         .from('AppMant')
         .getPublicUrl(fileName);
 
-    return publicUrl; // Retornamos el string de la URL
+    return publicUrl;
   } catch (e) {
-    // Si falla la subida o la obtención de la URL, el catch maneja el error
     print('Excepción durante la subida a Supabase: $e');
-    return null; // Indicamos que falló
+    return null;
   }
 }
 
 
-  // --- FUNCIÓN CLAVE: GUARDAR CAMBIOS ---
   Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
     
@@ -165,7 +162,6 @@ Future<String?> _uploadToSupabase() async {
       const SnackBar(content: Text('Guardando cambios...')),
     );
     
-    // 1. Subir imagen a Supabase (solo si _imageFile no es null)
     String? newImageUrl = await _uploadToSupabase(); 
 
     if (newImageUrl == null && _imageFile != null) {
@@ -175,7 +171,6 @@ Future<String?> _uploadToSupabase() async {
         return;
     }
 
-    // 2. Actualizar el documento en Firestore
     final disciplinaKey = _disciplinaKey;
     final schema = disciplinaKey.isNotEmpty ? await _schemaService.fetchSchema(disciplinaKey) : null;
     final attrs = _collectDynamicAttrs(schema?.fields ?? []);
@@ -204,7 +199,6 @@ Future<String?> _uploadToSupabase() async {
       'categoria': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'categoriaActivo': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'subcategoria': widget.initialData['subcategoria'],
-      // Si ya existía un correlativo, solo recalculamos el prefijo para mantener el ID estable.
       'idActivo': idActivo,
       'bloque': _bloqueController.text.trim(),
       'espacio': _espacioController.text.trim(),
@@ -215,6 +209,8 @@ Future<String?> _uploadToSupabase() async {
       'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaController.text),
       'codigoQR': idActivo,
       ...topLevelValues,
+      'marca': _marcaController.text.trim(),
+      'serie': _serieController.text.trim(),
       'ubicacion': {
         'nivel': _nivelController.text,
         'bloque': _bloqueController.text.trim(),
@@ -238,13 +234,12 @@ Future<String?> _uploadToSupabase() async {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Producto actualizado con éxito!')),
       );
-      Navigator.pop(context); // Regresar a la vista de detalle
+      Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // URL/Ruta de la imagen a mostrar (nueva local o actual remota)
     final imageUrlToDisplay = _imageFile != null 
         ? _imageFile!.path 
         : _currentImageUrl; 
@@ -261,7 +256,6 @@ Future<String?> _uploadToSupabase() async {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            // Sección de Imagen
             GestureDetector(
               onTap: _pickImage,
               child: Container(
@@ -273,9 +267,9 @@ Future<String?> _uploadToSupabase() async {
                 ),
                 child: Center(
                   child: isNewLocalFile
-                      ? Image.file(File(imageUrlToDisplay!), fit: BoxFit.cover) // Mostrar archivo local
+                      ? Image.file(File(imageUrlToDisplay!), fit: BoxFit.cover)
                       : imageUrlToDisplay != null && imageUrlToDisplay!.isNotEmpty
-                          ? Image.network( // Mostrar URL remota
+                          ? Image.network(
                               imageUrlToDisplay!,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
@@ -308,6 +302,14 @@ Future<String?> _uploadToSupabase() async {
               controller: _descripcionController,
               label: 'Descripción',
               maxLines: 3,
+            ),
+            _buildTextField(
+              controller: _marcaController,
+              label: 'Marca',
+            ),
+            _buildTextField(
+              controller: _serieController,
+              label: 'Serie',
             ),
 
             const SizedBox(height: 20),

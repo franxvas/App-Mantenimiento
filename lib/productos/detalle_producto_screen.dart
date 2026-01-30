@@ -482,44 +482,52 @@ class _ReportPill extends StatelessWidget {
 }
 
 Widget _buildQrSection(String codigoQR) {
-  return Container(
-    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.04),
-          blurRadius: 6,
-          offset: const Offset(0, 2),
+  return Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-      ],
-    ),
-    child: Column(
-      children: [
-        const Text(
-          "Código QR",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF444444)),
+        child: Column(
+          children: [
+            const Text(
+              "Código QR",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF444444)),
+            ),
+            const SizedBox(height: 16),
+            if (codigoQR.isNotEmpty)
+              QrImageView(
+                data: codigoQR,
+                version: QrVersions.auto,
+                size: 120.0,
+                padding: const EdgeInsets.all(10),
+                backgroundColor: Colors.white,
+              )
+            else
+              Icon(FontAwesomeIcons.qrcode, size: 80, color: Colors.grey[300]),
+            const SizedBox(height: 10),
+            Text(
+              codigoQR.isNotEmpty ? codigoQR : "No hay código QR asignado",
+              style: TextStyle(
+                color: codigoQR.isNotEmpty ? const Color(0xFF8B1E1E) : Colors.grey[600],
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
-        if (codigoQR.isNotEmpty)
-          QrImageView(
-            data: codigoQR,
-            version: QrVersions.auto,
-            size: 120.0,
-            padding: const EdgeInsets.all(10),
-            backgroundColor: Colors.white,
-          )
-        else
-          Icon(FontAwesomeIcons.qrcode, size: 80, color: Colors.grey[300]),
-        const SizedBox(height: 10),
-        Text(
-          codigoQR.isNotEmpty ? codigoQR : "No hay código QR asignado",
-          style: TextStyle(color: codigoQR.isNotEmpty ? const Color(0xFF8B1E1E) : Colors.grey[600], fontWeight: FontWeight.bold),
-          textAlign: TextAlign.center,
-        ),
-      ],
+      ),
     ),
   );
 }

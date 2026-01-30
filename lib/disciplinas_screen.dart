@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:appmantflutter/productos/lista_productos_screen.dart'; // Usaremos esta pantalla para listar productos por Disciplina
+import 'package:appmantflutter/productos/lista_productos_screen.dart';
+import 'package:appmantflutter/shared/disciplinas_config.dart';
 
-// Definimos un modelo simple para los datos
 class DisciplinaData {
   final String id;
   final String nombre;
@@ -14,13 +14,12 @@ class DisciplinaData {
 class DisciplinasScreen extends StatelessWidget {
   const DisciplinasScreen({super.key});
 
-  // Lista de datos estática
   static final List<DisciplinaData> disciplinas = [
-    DisciplinaData('arquitectura', 'Arquitectura', Icons.account_balance, const Color(0xFF3498db)),
-    DisciplinaData('electricas', 'Eléctricas', Icons.bolt, const Color(0xFFf1c40f)),
-    DisciplinaData('estructuras', 'Estructuras', Icons.domain, const Color(0xFF95a5a6)),
-    DisciplinaData('mecanica', 'Mecánica', Icons.settings, const Color(0xFFe67e22)),
-    DisciplinaData('sanitarias', 'Sanitarias', Icons.water_drop, const Color(0xFF1abc9c)),
+    DisciplinaData('arquitectura', 'Arquitectura', Icons.account_balance, disciplinaColor('arquitectura')),
+    DisciplinaData('electricas', 'Eléctricas', Icons.bolt, disciplinaColor('electricas')),
+    DisciplinaData('estructuras', 'Estructuras', Icons.domain, disciplinaColor('estructuras')),
+    DisciplinaData('mecanica', 'Mecánica', Icons.settings, disciplinaColor('mecanica')),
+    DisciplinaData('sanitarias', 'Sanitarias', Icons.water_drop, disciplinaColor('sanitarias')),
   ];
 
   @override
@@ -30,7 +29,7 @@ class DisciplinasScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Disciplinas'),
         elevation: 0,
-        centerTitle: false,
+        centerTitle: true,
       ),
       body: Column(
         children: [
@@ -48,19 +47,19 @@ class DisciplinasScreen extends StatelessWidget {
           ),
           
           Expanded(
-            child: GridView.builder(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(15),
-              itemCount: disciplinas.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 15,
-                mainAxisSpacing: 15,
-                childAspectRatio: 1.0,
+              child: Wrap(
+                spacing: 15,
+                runSpacing: 15,
+                alignment: WrapAlignment.center,
+                children: disciplinas.map((item) {
+                  return SizedBox(
+                    width: (MediaQuery.of(context).size.width / 2) - 22,
+                    child: _DisciplinaCard(item: item),
+                  );
+                }).toList(),
               ),
-              itemBuilder: (context, index) {
-                final item = disciplinas[index];
-                return _DisciplinaCard(item: item);
-              },
             ),
           ),
         ],
@@ -83,12 +82,11 @@ class _DisciplinaCard extends StatelessWidget {
       surfaceTintColor: Colors.white,
       child: InkWell(
         onTap: () {
-          // NAVEGACIÓN A LA LISTA DE PRODUCTOS FILTRADA POR DISCIPLINA
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => ListaProductosScreen(
-                filterBy: 'disciplina', // Nuevo parámetro de filtro
+                filterBy: 'disciplina',
                 filterValue: item.id,
                 title: item.nombre,
               ),

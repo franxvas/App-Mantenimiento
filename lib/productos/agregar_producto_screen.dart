@@ -24,11 +24,11 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   final _parametrosSchemaService = ParametrosSchemaService();
   final _datasetService = ParametrosDatasetService();
 
-  // Controladores de texto
   final _nombreCtrl = TextEditingController();
   final _descripcionCtrl = TextEditingController();
+  final _marcaCtrl = TextEditingController();
+  final _serieCtrl = TextEditingController();
 
-  // Ubicación
   final _bloqueCtrl = TextEditingController();
   final _nivelCtrl = TextEditingController();
   final _areaCtrl = TextEditingController();
@@ -39,7 +39,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
   final Map<String, TextEditingController> _dynamicControllers = {};
 
-  // Valores por defecto / Dropdowns
   String _categoria = 'luminarias';
   String _disciplina = 'Electricas';
   String _subcategoria = 'luces_emergencia';
@@ -59,6 +58,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   void dispose() {
     _nombreCtrl.dispose();
     _descripcionCtrl.dispose();
+    _marcaCtrl.dispose();
+    _serieCtrl.dispose();
     _bloqueCtrl.dispose();
     _nivelCtrl.dispose();
     _areaCtrl.dispose();
@@ -79,7 +80,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     _updateIdActivoPreview();
   }
 
-  // --- 1. SELECCIONAR IMAGEN ---
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -88,13 +88,11 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     }
   }
 
-  // --- 2. SUBIR A SUPABASE ---
   Future<String?> _uploadImageToSupabase() async {
     if (_imageFile == null) return null;
 
     final supabase = Supabase.instance.client;
     final fileExt = _imageFile!.path.split('.').last;
-    // Usamos timestamp para nombre único
     final fileName = 'productos/new_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
 
     try {
@@ -107,16 +105,13 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     }
   }
 
-  // --- 3. GUARDAR EN FIRESTORE ---
   Future<void> _guardarProducto() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isUploading = true);
 
     try {
-      // A. Subir imagen
       final String? imageUrl = await _uploadImageToSupabase();
 
-      // Generar el código QR de manera automática y atómica.
       final disciplinaKey = _disciplina.toLowerCase();
       final int activoCounter = await _getAndIncrementActivoCounter(disciplinaKey);
       final correlativo = ActivoIdHelper.formatCorrelativo(activoCounter);
@@ -129,7 +124,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       );
       final String codigoQr = idActivo;
 
-      // B. Guardar documento
       final schema = await _schemaService.fetchSchema(_disciplina.toLowerCase());
       final attrs = _collectDynamicAttrs(schema?.fields ?? []);
       final topLevelValues = _extractTopLevel(attrs);
@@ -158,8 +152,9 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'costoReemplazo': _parseDouble(_costoReemplazoCtrl.text),
         'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaCtrl.text),
         ...topLevelValues,
+        'marca': _marcaCtrl.text.trim(),
+        'serie': _serieCtrl.text.trim(),
         'codigoQR': codigoQr,
-        // Mapa de ubicación
         'ubicacion': {
           'bloque': _bloqueCtrl.text,
           'nivel': nivelValue,
@@ -213,7 +208,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              // FOTO
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
@@ -239,7 +233,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
               const SizedBox(height: 10),
               _buildTextField(_nombreCtrl, "Nombre del Equipo"),
               
-              // Dropdowns simples para categorías (puedes hacerlos más complejos si quieres)
               _buildDropdown(
                 "Disciplina",
                 _disciplina,
@@ -256,6 +249,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                 isManual: true,
                 onChanged: (val) => _subcategoria = val,
               ),
+              _buildTextField(_marcaCtrl, "Marca"),
+              _buildTextField(_serieCtrl, "Serie"),
               
               const SizedBox(height: 20),
               const Text("Ubicación", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
@@ -358,7 +353,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           }
         },
         keyboardType: keyboardType,
-        initialValue: isManual && ctrl == null ? _subcategoria : null, // Para el caso manual simple
+        initialValue: isManual && ctrl == null ? _subcategoria : null,
         decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
         validator: (v) => (v == null || v.isEmpty) && !isManual ? 'Campo requerido' : null,
       ),

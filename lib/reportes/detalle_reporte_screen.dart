@@ -59,13 +59,11 @@ class DetalleReporteScreen extends StatelessWidget {
             'registrado';
         final bool isCompleted = estado.toLowerCase() == 'completado' || estado.toLowerCase() == 'operativo';
         
-        // Manejo de Fechas
         final Timestamp? tsFecha = data['fechaInspeccion'] ?? data['fecha'];
         final String fechaDisplay = tsFecha != null
             ? DateFormat('dd/MM/yyyy - HH:mm').format(tsFecha.toDate())
             : '--/--/----';
 
-        // --- LÓGICA CORREGIDA PARA COMENTARIOS/SOLUCIÓN ---
         final String comentarios = data['comentarios'] ?? '';
         final bool haySolucion = comentarios.isNotEmpty;
 
@@ -109,16 +107,13 @@ class DetalleReporteScreen extends StatelessWidget {
                   content: Text(data['descripcion'] ?? data['motivo'] ?? 'Sin descripción del problema.', style: const TextStyle(fontSize: 15, color: Color(0xFF666666))),
                 ),
                 
-                // --- AQUÍ ESTÁ EL CAMBIO ---
                 _buildSection(
                   title: "Acciones Tomadas / Solución",
                   icon: FontAwesomeIcons.screwdriverWrench,
-                  // Ahora mostramos 'comentarios'. Si está vacío, mostramos el mensaje rojo.
                   content: Text(
                     haySolucion ? comentarios : 'Pendiente de solución o acciones no registradas.', 
                     style: TextStyle(
                       fontSize: 15, 
-                      // Si hay texto es gris oscuro, si no hay es rojo
                       color: haySolucion ? const Color(0xFF666666) : Colors.red[700]
                     ),
                   ),
@@ -134,7 +129,6 @@ class DetalleReporteScreen extends StatelessWidget {
     );
   }
 
-  // --- WIDGETS AUXILIARES ---
   
   Widget _buildHeader(Map<String, dynamic> data, String estado, bool isCompleted, String fecha) {
     return Container(
@@ -212,43 +206,92 @@ class DetalleReporteScreen extends StatelessWidget {
   }
 
   Widget _buildDetails(Map<String, dynamic> data) {
-    // Leemos la ubicación del mapa guardado
     final ubicacion = data['ubicacion'] ?? {};
+    final fields = <_DetailField>[
+      _DetailField(label: "Responsable", value: _resolveResponsableName(data)),
+      _DetailField(label: "Tipo de Reporte", value: data['tipoReporte'] ?? data['tipo_reporte']),
+      _DetailField(label: "Disciplina", value: data['disciplina']),
+      _DetailField(label: "Categoría", value: data['categoria']),
+      _DetailField(label: "ID Sistema", value: data['productId']),
+      _DetailField(label: "Bloque", value: ubicacion['bloque']),
+      _DetailField(label: "Nivel", value: ubicacion['nivel'] ?? ubicacion['piso']),
+      _DetailField(label: "Área", value: ubicacion['area']),
+      _DetailField(label: "Estado anterior", value: data['estadoAnterior']),
+      _DetailField(label: "Estado detectado", value: data['estadoDetectado']),
+      _DetailField(label: "Estado nuevo", value: data['estadoNuevo'] ?? data['estadoOperativo'] ?? data['estado']),
+      _DetailField(label: "Condición física", value: data['condicionFisica']),
+      _DetailField(label: "Tipo mantenimiento", value: data['tipoMantenimiento']),
+      _DetailField(label: "Nivel criticidad", value: data['nivelCriticidad']),
+      _DetailField(label: "Impacto falla", value: data['impactoFalla']),
+      _DetailField(label: "Riesgo normativo", value: data['riesgoNormativo']),
+      _DetailField(label: "Riesgo eléctrico", value: data['riesgoElectrico']),
+      _DetailField(label: "Acción recomendada", value: data['accionRecomendada']),
+      _DetailField(label: "Costo estimado", value: _formatNumber(data['costoEstimado'])),
+      _DetailField(
+        label: "Requiere reemplazo",
+        value: data['requiereReemplazo'] == null ? null : (data['requiereReemplazo'] == true ? 'Sí' : 'No'),
+      ),
+    ];
+    final visibleFields = fields.where((field) => field.value != null && field.value!.toString().trim().isNotEmpty).toList();
 
     return _buildSection(
-      title: "Información General",
+      title: "Detalles del Reporte",
       icon: FontAwesomeIcons.circleInfo,
-      content: Column(
-        children: [
-          _DetailRow(icon: FontAwesomeIcons.userTag, label: "Responsable", value: data['responsable'] ?? '--'),
-          _DetailRow(icon: FontAwesomeIcons.tag, label: "Tipo de Reporte", value: data['tipoReporte'] ?? 'General'),
-          // Mostramos el Bloque correcto
-          _DetailRow(icon: FontAwesomeIcons.building, label: "Bloque", value: ubicacion['bloque'] ?? '--'),
-          _DetailRow(
-            icon: FontAwesomeIcons.layerGroup,
-            label: "Nivel",
-            value: ubicacion['nivel'] ?? ubicacion['piso'] ?? '--',
-          ),
-        ],
+      content: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: visibleFields.map((field) => _InfoPill(label: field.label, value: field.value!)).toList(),
       ),
     );
   }
+
+  String _resolveResponsableName(Map<String, dynamic> data) {
+    return data['responsableNombre'] ??
+        data['responsable'] ??
+        data['encargado'] ??
+        '--';
+  }
+
+  String _formatNumber(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+    return value.toString();
+  }
   
-  Widget _DetailRow({required IconData icon, required String label, required String value}) {
-    return Padding(
-        padding: const EdgeInsets.only(bottom: 12.0),
-        child: Row(
-            children: [
-                SizedBox(
-                    width: 30,
-                    child: Icon(icon, size: 18, color: const Color(0xFF555555)),
-                ),
-                Text("$label: ", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF333333))),
-                Expanded(
-                    child: Text(value, style: const TextStyle(fontSize: 15, color: Color(0xFF666666))),
-                ),
-            ],
+}
+
+class _DetailField {
+  final String label;
+  final String? value;
+
+  const _DetailField({required this.label, required this.value});
+}
+
+class _InfoPill extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoPill({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(fontSize: 13, color: Color(0xFF444444)),
+          children: [
+            TextSpan(text: '$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+            TextSpan(text: value),
+          ],
         ),
+      ),
     );
   }
 }

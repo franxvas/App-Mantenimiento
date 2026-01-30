@@ -8,16 +8,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PdfService {
   
-  // -----------------------------------------------------------
-  // --- A. EXPORTAR FICHA TÉCNICA (DETALLE PRODUCTO) ---
-  // -----------------------------------------------------------
   static Future<void> generarFichaTecnica({
     required Map<String, dynamic> producto,
     required String productId,
     required List<Map<String, dynamic>> ultimosReportes,
   }) async {
     
-    // 1. Cargar la imagen de la red (si existe)
     final String? imageUrl = producto['imagenUrl'];
     Uint8List? imageBytes;
     
@@ -65,9 +61,6 @@ class PdfService {
     }
   }
 
-  // -----------------------------------------------------------
-  // --- B. EXPORTAR REPORTE INDIVIDUAL (DETALLE REPORTE) ---
-  // -----------------------------------------------------------
   
   static Future<void> generarReporte({
     required Map<String, dynamic> reporte,
@@ -75,12 +68,21 @@ class PdfService {
   }) async {
     final pdf = pw.Document();
     
-    // Preparar datos
     final String nro = reporte['nro'] ?? '0000';
-    final String fecha = reporte['fechaDisplay'] ?? '--/--/----';
-    final String nombreEquipo = reporte['activo_nombre'] ?? 'N/A';
-    final String estadoNuevo = reporte['estado_nuevo']?.toUpperCase() ?? 'N/A';
+    final String fecha = _formatDate(reporte['fechaInspeccion'] ?? reporte['fecha']);
+    final String nombreEquipo = reporte['activo_nombre'] ?? reporte['activoNombre'] ?? 'N/A';
+    final String estadoNuevo =
+        (reporte['estadoNuevo'] ?? reporte['estadoOperativo'] ?? reporte['estado_nuevo'] ?? reporte['estado'])
+            ?.toString()
+            .toUpperCase() ??
+        'N/A';
     final Map<String, dynamic> ubicacion = reporte['ubicacion'] ?? {};
+    final String responsable = reporte['responsableNombre'] ?? reporte['responsable'] ?? reporte['encargado'] ?? 'N/A';
+    final String tipoReporte = reporte['tipoReporte'] ?? reporte['tipo_reporte'] ?? 'General';
+    final String requiereReemplazo = reporte['requiereReemplazo'] == null
+        ? ''
+        : (reporte['requiereReemplazo'] == true ? 'Sí' : 'No');
+    final String costoEstimado = _formatNumber(reporte['costoEstimado'] ?? reporte['costo']);
 
     try {
       pdf.addPage(
@@ -89,51 +91,66 @@ class PdfService {
           margin: const pw.EdgeInsets.all(32),
           build: (pw.Context context) {
             return [
-              // 1. Título del Reporte
               _buildPdfHeader("REPORTE TÉCNICO N° $nro"),
               pw.Divider(height: 20, thickness: 2, color: PdfColors.red800),
               
-              // 2. Información General
               _buildPdfSection(
-                "Información General", 
+                "Información General",
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     _infoRow("Fecha de Emisión:", fecha),
-                    _infoRow("Encargado:", reporte['encargado']),
-                    _infoRow("Tipo de Reporte:", reporte['tipo_reporte']),
+                    _infoRow("Responsable:", responsable),
+                    _infoRow("Tipo de Reporte:", tipoReporte),
                     _infoRow("Estado Final del Equipo:", estadoNuevo),
-                  ]
-                )
+                  ],
+                ),
               ),
               
-              // 3. Datos del Equipo
-               _buildPdfSection(
-                "Datos del Equipo", 
+              _buildPdfSection(
+                "Datos del Equipo",
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     _infoRow("Equipo:", nombreEquipo),
                     _infoRow("Categoría:", reporte['categoria']),
                     _infoRow("ID Sistema:", reporte['productId']),
-                  ]
-                )
+                  ],
+                ),
               ),
 
-              // 4. NUEVA SECCIÓN: UBICACIÓN
               _buildPdfSection(
-                "Ubicación del Equipo", 
+                "Ubicación del Equipo",
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     _infoRow("Bloque:", ubicacion['bloque']),
                     _infoRow("Nivel:", ubicacion['nivel'] ?? ubicacion['piso']),
-                    _infoRow("Área:", ubicacion['area']), // Agregué Área también por si acaso
-                  ]
-                )
+                    _infoRow("Área:", ubicacion['area']),
+                  ],
+                ),
               ),
 
-              // 5. Descripción del Problema
+              _buildPdfSection(
+                "Detalles del Reporte",
+                _buildPills(
+                  [
+                    _PillData(label: 'Disciplina', value: reporte['disciplina']),
+                    _PillData(label: 'Estado detectado', value: reporte['estadoDetectado']),
+                    _PillData(label: 'Estado anterior', value: reporte['estadoAnterior']),
+                    _PillData(label: 'Condición física', value: reporte['condicionFisica']),
+                    _PillData(label: 'Tipo mantenimiento', value: reporte['tipoMantenimiento']),
+                    _PillData(label: 'Nivel criticidad', value: reporte['nivelCriticidad']),
+                    _PillData(label: 'Impacto falla', value: reporte['impactoFalla']),
+                    _PillData(label: 'Riesgo normativo', value: reporte['riesgoNormativo']),
+                    _PillData(label: 'Riesgo eléctrico', value: reporte['riesgoElectrico']),
+                    _PillData(label: 'Acción recomendada', value: reporte['accionRecomendada']),
+                    _PillData(label: 'Costo estimado', value: costoEstimado),
+                    _PillData(label: 'Requiere reemplazo', value: requiereReemplazo),
+                  ],
+                ),
+              ),
+
               _buildPdfSection(
                 "Descripción del Problema / Motivo", 
                 pw.Container(
@@ -147,7 +164,6 @@ class PdfService {
                 )
               ),
               
-              // 6. Solución / Comentarios
               _buildPdfSection(
                 "Acciones Tomadas / Comentarios", 
                 pw.Container(
@@ -163,7 +179,6 @@ class PdfService {
               
               pw.SizedBox(height: 40),
               
-              // 7. Área de Firma
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.end,
                 children: [
@@ -172,7 +187,7 @@ class PdfService {
                       pw.Container(width: 150, height: 1, color: PdfColors.black),
                       pw.SizedBox(height: 5),
                       pw.Text("Firma del Encargado", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      pw.Text(reporte['encargado'] ?? '', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                      pw.Text(responsable, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ]
                   )
                 ]
@@ -185,7 +200,6 @@ class PdfService {
         ),
       );
 
-      // Compartir/Guardar el PDF
       await Printing.sharePdf(bytes: await pdf.save(), filename: 'Reporte_$nro.pdf');
       
     } catch (e) {
@@ -193,16 +207,11 @@ class PdfService {
     }
   }
 
-  // -----------------------------------------------------------
-  // --- WIDGETS INTERNOS Y HELPERS (REUTILIZABLES) ---
-  // -----------------------------------------------------------
 
-  // Helper para títulos grandes
   static pw.Widget _buildPdfHeader(String title) {
     return pw.Text(title, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900));
   }
 
-  // Helper para secciones con título y contenido
   static pw.Widget _buildPdfSection(String title, pw.Widget content) {
     return pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 15),
@@ -214,6 +223,40 @@ class PdfService {
           pw.SizedBox(height: 5),
           content,
         ],
+      ),
+    );
+  }
+
+  static pw.Widget _buildPills(List<_PillData> items) {
+    final visible = items
+        .where((item) => item.value != null && item.value!.toString().trim().isNotEmpty)
+        .toList();
+    if (visible.isEmpty) {
+      return pw.Text("Sin detalles adicionales.", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600));
+    }
+    return pw.Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: visible.map(_buildPill).toList(),
+    );
+  }
+
+  static pw.Widget _buildPill(_PillData data) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey100,
+        borderRadius: pw.BorderRadius.circular(12),
+        border: pw.Border.all(color: PdfColors.grey300),
+      ),
+      child: pw.RichText(
+        text: pw.TextSpan(
+          style: const pw.TextStyle(fontSize: 10, color: PdfColors.blueGrey800),
+          children: [
+            pw.TextSpan(text: '${data.label}: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+            pw.TextSpan(text: data.value.toString()),
+          ],
+        ),
       ),
     );
   }
@@ -388,7 +431,13 @@ class PdfService {
     return DateFormat('dd/MM/yyyy').format(date);
   }
 
-  // Helper básico para filas de texto
+  static String _formatNumber(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+    return value.toString();
+  }
+
   static pw.Widget _infoRow(String label, String? value) {
       return pw.Padding(
         padding: const pw.EdgeInsets.only(bottom: 4), 
@@ -415,4 +464,11 @@ class PdfService {
       ],
     );
   }
+}
+
+class _PillData {
+  final String label;
+  final dynamic value;
+
+  const _PillData({required this.label, required this.value});
 }

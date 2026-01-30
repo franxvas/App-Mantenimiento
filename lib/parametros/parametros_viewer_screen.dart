@@ -152,12 +152,17 @@ class _ReportesViewer extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: DropdownButtonFormField<String>(
                 value: currentProductId,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Activo'),
                 items: products
                     .map(
                       (doc) => DropdownMenuItem(
                         value: doc.id,
-                        child: Text(doc.data()['nombreProducto']?.toString() ?? doc.data()['nombre']?.toString() ?? doc.id),
+                        child: Text(
+                          doc.data()['nombreProducto']?.toString() ?? doc.data()['nombre']?.toString() ?? doc.id,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     )
                     .toList(),

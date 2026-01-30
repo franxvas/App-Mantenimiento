@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
-// IMPORTACIONES NECESARIAS
-import 'package:appmantflutter/reportes/seleccionar_producto_reporte_screen.dart'; 
-import 'package:appmantflutter/reportes/detalle_reporte_screen.dart'; // <--- NUEVO: Para ver el detalle y PDF
+import 'package:appmantflutter/reportes/seleccionar_producto_reporte_screen.dart';
+import 'package:appmantflutter/reportes/detalle_reporte_screen.dart';
 
 class ListaReportesPorCategoriaScreen extends StatelessWidget {
-  final String categoriaFilter; // 'luminarias'
-  final String categoriaTitle;  // 'Luminarias'
+  final String categoriaFilter;
+  final String categoriaTitle;
 
   const ListaReportesPorCategoriaScreen({
     super.key,
@@ -23,6 +22,7 @@ class ListaReportesPorCategoriaScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text("Reportes: $categoriaTitle"),
         titleTextStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        centerTitle: true,
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
@@ -31,7 +31,7 @@ class ListaReportesPorCategoriaScreen extends StatelessWidget {
               fromFirestore: (snapshot, _) => snapshot.data() ?? {},
               toFirestore: (data, _) => data,
             )
-            .where('categoria', isEqualTo: categoriaFilter) // Filtra reportes por categoría
+            .where('categoria', isEqualTo: categoriaFilter)
             .orderBy('fechaInspeccion', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
@@ -93,16 +93,14 @@ class ListaReportesPorCategoriaScreen extends StatelessWidget {
               final doc = docs[index];
               final data = doc.data();
               
-              // Pasamos el ID del documento para poder navegar
               return _ReporteListCard(
                 reporte: data, 
-                reportId: doc.id // <--- ID NECESARIO PARA EL DETALLE
+                reportId: doc.id
               );
             },
           );
         },
       ),
-      // BOTÓN FLOTANTE: AGREGAR REPORTE
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
@@ -121,10 +119,9 @@ class ListaReportesPorCategoriaScreen extends StatelessWidget {
   }
 }
 
-// Tarjeta para mostrar el reporte en la lista (AHORA CLIQUEABLE)
 class _ReporteListCard extends StatelessWidget {
   final Map<String, dynamic> reporte;
-  final String reportId; // Nuevo parámetro
+  final String reportId;
 
   const _ReporteListCard({
     required this.reporte, 
@@ -148,7 +145,6 @@ class _ReporteListCard extends StatelessWidget {
             ? Colors.orange
             : Colors.red;
     
-    // Fecha
     final Timestamp? ts = reporte['fechaInspeccion'] ?? reporte['fecha'];
     final String fecha = ts != null ? DateFormat('dd/MM/yyyy').format(ts.toDate()) : '--';
     final String accionRecomendada = reporte['accionRecomendada'] ??
@@ -160,16 +156,15 @@ class _ReporteListCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: InkWell( // Efecto visual al tocar
+      child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: () {
-          // --- NAVEGACIÓN AL DETALLE (CON PDF INCLUIDO) ---
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => DetalleReporteScreen(
                 reportId: reportId,
-                initialReportData: reporte, // Pasamos datos para carga instantánea
+                initialReportData: reporte,
               ),
             ),
           );

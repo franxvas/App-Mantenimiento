@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:appmantflutter/usuarios/nuevo_usuario_screen.dart';
 import 'package:appmantflutter/usuarios/detalle_usuario_screen.dart';
 
@@ -34,15 +35,14 @@ class ListaUsuariosScreen extends StatelessWidget {
             return const Center(child: Text("No hay usuarios registrados."));
           }
 
-          // USAMOS GRIDVIEW EN LUGAR DE LISTVIEW
           return GridView.builder(
             padding: const EdgeInsets.all(15),
             itemCount: docs.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // 2 Columnas
-              crossAxisSpacing: 15, // Espacio horizontal
-              mainAxisSpacing: 15,  // Espacio vertical
-              childAspectRatio: 0.75, // Relación de aspecto (Alto vs Ancho) para que quepan los datos
+              crossAxisCount: 2,
+              crossAxisSpacing: 15,
+              mainAxisSpacing: 15,
+              childAspectRatio: 0.75,
             ),
             itemBuilder: (context, index) {
               final doc = docs[index];
@@ -54,18 +54,44 @@ class ListaUsuariosScreen extends StatelessWidget {
           );
         },
       ),
-      // FAB para agregar usuario
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const NuevoUsuarioScreen()));
+      floatingActionButton: FutureBuilder<bool>(
+        future: _isCurrentUserAdmin(),
+        builder: (context, snapshot) {
+          if (snapshot.data != true) {
+            return const SizedBox.shrink();
+          }
+          return FloatingActionButton(
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const NuevoUsuarioScreen()));
+            },
+            child: const Icon(Icons.add, color: Colors.white),
+          );
         },
-        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
+
+  Future<bool> _isCurrentUserAdmin() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return false;
+    }
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      return false;
+    }
+    final snapshot = await FirebaseFirestore.instance
+        .collection('usuarios')
+        .where('email', isEqualTo: email)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) {
+      return false;
+    }
+    return (snapshot.docs.first.data()['rol'] ?? '') == 'admin';
+  }
 }
 
-// --- WIDGET DE LA TARJETA DE USUARIO ---
 class _UserGridCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final String userId;
@@ -88,7 +114,6 @@ class _UserGridCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(15),
         onTap: () {
-          // Navegar al detalle
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -101,7 +126,6 @@ class _UserGridCard extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // 1. IMAGEN / AVATAR
               Container(
                 width: 70,
                 height: 70,
@@ -120,7 +144,6 @@ class _UserGridCard extends StatelessWidget {
               
               const SizedBox(height: 10),
 
-              // 2. NOMBRE
               Text(
                 nombre,
                 textAlign: TextAlign.center,
@@ -135,7 +158,6 @@ class _UserGridCard extends StatelessWidget {
 
               const SizedBox(height: 6),
 
-              // 3. CARGO (Texto azul)
               Text(
                 cargo.toUpperCase(),
                 textAlign: TextAlign.center,
@@ -152,7 +174,6 @@ class _UserGridCard extends StatelessWidget {
               const Divider(height: 1, thickness: 0.5),
               const SizedBox(height: 8),
 
-              // 4. AREA Y ROL
               _infoRow(Icons.apartment, area),
               const SizedBox(height: 4),
               _infoRow(Icons.shield_outlined, rol),
@@ -163,7 +184,6 @@ class _UserGridCard extends StatelessWidget {
     );
   }
 
-  // Helper pequeño para las filas de Area y Rol
   Widget _infoRow(IconData icon, String text) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
