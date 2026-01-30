@@ -155,7 +155,7 @@ class _ProductCard extends StatelessWidget {
   final String id;
   final String nombre;
   final String estado;
-  final String? imagenUrl; // Puede ser null si no tiene foto
+  final String? imagenUrl;
   final VoidCallback onTap;
 
   const _ProductCard({
