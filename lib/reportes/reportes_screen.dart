@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:appmantflutter/reportes/categorias_reporte_screen.dart'; // Importa la siguiente pantalla
+import 'package:appmantflutter/reportes/categorias_reporte_screen.dart';
+import 'package:appmantflutter/shared/disciplinas_config.dart';
 
 class ReportesScreen extends StatelessWidget {
   const ReportesScreen({super.key});
 
-  // Lista de datos para las tarjetas de disciplina
   static final List<Map<String, dynamic>> disciplinasReporte = [
-    {'id': 'arquitectura', 'nombre': 'Arquitectura', 'icon': Icons.account_balance, 'color': const Color(0xFF3498DB)},
-    {'id': 'electricas', 'nombre': 'Eléctricas', 'icon': Icons.bolt, 'color': const Color(0xFFF1C40F)},
-    {'id': 'estructuras', 'nombre': 'Estructuras', 'icon': Icons.apartment, 'color': const Color(0xFF7F8C8D)},
-    {'id': 'mecanica', 'nombre': 'Mecánica', 'icon': Icons.miscellaneous_services, 'color': const Color(0xFFE67E22)},
-    {'id': 'sanitarias', 'nombre': 'Sanitarias', 'icon': Icons.water_drop, 'color': const Color(0xFF1ABC9C)},
+    {'id': 'arquitectura', 'nombre': 'Arquitectura', 'icon': Icons.account_balance, 'color': disciplinaColor('arquitectura')},
+    {'id': 'electricas', 'nombre': 'Eléctricas', 'icon': Icons.bolt, 'color': disciplinaColor('electricas')},
+    {'id': 'estructuras', 'nombre': 'Estructuras', 'icon': Icons.apartment, 'color': disciplinaColor('estructuras')},
+    {'id': 'mecanica', 'nombre': 'Mecánica', 'icon': Icons.miscellaneous_services, 'color': disciplinaColor('mecanica')},
+    {'id': 'sanitarias', 'nombre': 'Sanitarias', 'icon': Icons.water_drop, 'color': disciplinaColor('sanitarias')},
   ];
 
   @override
@@ -37,7 +37,6 @@ class ReportesScreen extends StatelessWidget {
             ),
             const SizedBox(height: 30),
 
-            // WRAP para el layout de la grilla con centrado
             Wrap(
               spacing: 20,
               runSpacing: 20,
@@ -48,7 +47,6 @@ class ReportesScreen extends StatelessWidget {
                   icon: item['icon'],
                   color: item['color'],
                   onTap: () {
-                    // NAVEGACIÓN A CATEGORÍAS
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -69,7 +67,6 @@ class ReportesScreen extends StatelessWidget {
   }
 }
 
-// Widget privado para la tarjeta de Reportes
 class _ReportCard extends StatelessWidget {
   final String title;
   final IconData icon;

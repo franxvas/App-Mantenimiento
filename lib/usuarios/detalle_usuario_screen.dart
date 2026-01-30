@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Necesario para el ID actual
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:appmantflutter/usuarios/editar_usuario_screen.dart'; // Importar pantalla de edición
+import 'package:appmantflutter/usuarios/editar_usuario_screen.dart';
 
 class DetalleUsuarioScreen extends StatelessWidget {
   final String userId;
@@ -11,8 +11,6 @@ class DetalleUsuarioScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Obtener ID del usuario actual logueado
-    final String currentAuthId = FirebaseAuth.instance.currentUser?.uid ?? '';
     final usersRef = FirebaseFirestore.instance
         .collection('usuarios')
         .withConverter<Map<String, dynamic>>(
@@ -25,79 +23,37 @@ class DetalleUsuarioScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text("Perfil de Usuario"),
         actions: [
-          // --- BOTÓN ELIMINAR (Solo Admin debería ver esto, lógica futura) ---
-          IconButton(icon: const Icon(FontAwesomeIcons.trash, size: 18, color: Color(0xFFE74C3C)), onPressed: () {
-             // Lógica de eliminar (requiere validar rol de admin también)
-          }),
-          
-          // --- BOTÓN EDITAR (Con Lógica de Permisos) ---
-          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            // Escuchamos el perfil del usuario LOGUEADO para saber su rol
-            stream: usersRef.doc(currentAuthId).snapshots(),
+          FutureBuilder<bool>(
+            future: _isCurrentUserAdmin(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) return Container(); // Cargando o error
-              
-              final currentUserData = snapshot.data!.data();
-              final String myRole = currentUserData?['rol'] ?? 'user';
-              
-              // CONDICIÓN DE PERMISO:
-              // 1. Soy Admin
-              // 2. O El perfil que estoy viendo es el mío
-              // NOTA: Para que esto funcione perfecto, el documento en 'usuarios' debe tener el mismo ID que el UID de Auth.
-              // Si no es así, tendrías que buscar el documento donde email == currentUser.email.
-              
-              // ASUMIENDO BÚSQUEDA POR EMAIL PARA SEGURIDAD ROBUSTA SI LOS IDS NO COINCIDEN
-              final String myEmail = FirebaseAuth.instance.currentUser?.email ?? '';
-              
-              return FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                future: usersRef.where('email', isEqualTo: myEmail).get(),
-                builder: (context, AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> myProfileSnap) {
-                   bool canEdit = false;
-                   
-                   if (myProfileSnap.hasData && myProfileSnap.data!.docs.isNotEmpty) {
-                      final myProfileDoc = myProfileSnap.data!.docs.first;
-                      final myProfile = myProfileDoc.data();
-                      final String myRoleReal = myProfile['rol'] ?? 'user';
-                      final String myDocId = myProfileDoc.id;
-                      
-                      // Si soy admin O si este perfil es el mío
-                      if (myRoleReal == 'admin' || userId == myDocId) {
-                        canEdit = true;
+              if (snapshot.data != true) {
+                return const SizedBox.shrink();
+              }
+              return Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(FontAwesomeIcons.trash, size: 18, color: Color(0xFFE74C3C)),
+                    onPressed: () => _confirmDelete(context, usersRef),
+                  ),
+                  IconButton(
+                    icon: const Icon(FontAwesomeIcons.pencil, size: 18, color: Colors.white),
+                    onPressed: () async {
+                      final doc = await usersRef.doc(userId).get();
+                      final userData = doc.data();
+                      if (doc.exists && userData != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditarUsuarioScreen(
+                              userId: userId,
+                              userData: userData,
+                            ),
+                          ),
+                        );
                       }
-                   }
-
-                   if (canEdit) {
-                     return IconButton(
-                       icon: const Icon(FontAwesomeIcons.pencil, size: 18, color: Colors.white),
-                       onPressed: () {
-                         // Para editar, necesitamos los datos actuales. Los obtenemos del FutureBuilder principal del body
-                         // Pero como no podemos acceder a ese snapshot desde aquí, hacemos una navegación simple
-                         // y que la pantalla de editar cargue sus datos o se los pasamos si reestructuramos.
-                         
-                         // MEJOR ESTRATEGIA: Pasarle los datos desde el body (usando un FloatingActionButton o moviendo este botón)
-                         // O simplemente leerlos de nuevo en la pantalla de editar.
-                         
-                         // Vamos a leerlos aquí rápido para pasarlos:
-                         usersRef.doc(userId).get().then((doc) {
-                           final userData = doc.data();
-                           if (doc.exists && userData != null) {
-                             Navigator.push(
-                               context,
-                               MaterialPageRoute(
-                                 builder: (context) => EditarUsuarioScreen(
-                                   userId: userId,
-                                   userData: userData,
-                                 ),
-                               ),
-                             );
-                           }
-                         });
-                       },
-                     );
-                   } else {
-                     return Container(); // No mostrar botón si no tiene permiso
-                   }
-                }
+                    },
+                  ),
+                ],
               );
             },
           ),
@@ -118,7 +74,6 @@ class DetalleUsuarioScreen extends StatelessWidget {
           return SingleChildScrollView(
             child: Column(
               children: [
-                // CABECERA DE PERFIL
                 Container(
                   width: double.infinity,
                   color: Colors.white,
@@ -141,7 +96,6 @@ class DetalleUsuarioScreen extends StatelessWidget {
                       Text(user['cargo'] ?? '', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF495057))),
                       
                       const SizedBox(height: 5),
-                      // Mostrar Rol (Badge)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
@@ -156,7 +110,6 @@ class DetalleUsuarioScreen extends StatelessWidget {
                 
                 const SizedBox(height: 10),
 
-                // SECCIÓN DE DETALLES
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -164,14 +117,13 @@ class DetalleUsuarioScreen extends StatelessWidget {
                     children: [
                       _DetailRow(icon: FontAwesomeIcons.building, label: "Área", value: user['area']),
                       _DetailRow(icon: FontAwesomeIcons.phone, label: "Celular", value: user['celular']),
-                      _DetailRow(icon: FontAwesomeIcons.envelope, label: "Email", value: user['email']),
+                      _DetailRow(icon: FontAwesomeIcons.envelope, label: "Correo", value: user['email']),
                     ],
                   ),
                 ),
 
                 const SizedBox(height: 10),
 
-                // SECCIÓN DE FIRMA
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.all(20),
@@ -204,9 +156,61 @@ class DetalleUsuarioScreen extends StatelessWidget {
       ),
     );
   }
+
+  Future<bool> _isCurrentUserAdmin() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return false;
+    }
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      return false;
+    }
+    final snapshot = await FirebaseFirestore.instance
+        .collection('usuarios')
+        .where('email', isEqualTo: email)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) {
+      return false;
+    }
+    return (snapshot.docs.first.data()['rol'] ?? '') == 'admin';
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    CollectionReference<Map<String, dynamic>> usersRef,
+  ) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Eliminar usuario"),
+        content: const Text("¿Estás seguro de eliminar este usuario?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancelar"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Eliminar"),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete != true) {
+      return;
+    }
+    await usersRef.doc(userId).delete();
+    if (context.mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Usuario eliminado")),
+      );
+    }
+  }
 }
 
-// Widget auxiliar para fila de detalle
 class _DetailRow extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -225,7 +229,7 @@ class _DetailRow extends StatelessWidget {
         children: [
           Icon(icon, size: 24, color: const Color(0xFF555555)),
           const SizedBox(width: 20),
-          Expanded( // Agregado Expanded para evitar overflow si el email es largo
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

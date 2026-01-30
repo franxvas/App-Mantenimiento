@@ -67,7 +67,7 @@ class ReportCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                "Responsable: ${reporte['responsable'] ?? 'N/A'}",
+                "Responsable: ${reporte['responsableNombre'] ?? reporte['responsable'] ?? 'N/A'}",
                 style: const TextStyle(fontSize: 15, color: Color(0xFF555555)),
               ),
               Text(

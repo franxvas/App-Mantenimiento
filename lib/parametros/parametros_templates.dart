@@ -236,7 +236,7 @@ dynamic valueForHeader(
     case 'Costo_Estimado':
       return _formatNumber(reportData['costoEstimado'] ?? reportData['costo']);
     case 'Responsable':
-      return reportData['responsable'] ?? '';
+      return reportData['responsableNombre'] ?? reportData['responsable'] ?? reportData['encargado'] ?? '';
     case 'Riesgo_Electrico':
       return reportData['riesgoElectrico'] ?? '';
     case 'Riesgo_Sanitario':

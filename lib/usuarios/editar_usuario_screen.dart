@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // NECESARIO para el usuario logueado
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
@@ -22,8 +22,8 @@ class EditarUsuarioScreen extends StatefulWidget {
 class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
+  late final Future<bool> _isAdminFuture;
 
-  // Controladores
   late TextEditingController _nombreCtrl;
   late TextEditingController _dniCtrl;
   late TextEditingController _cargoCtrl;
@@ -31,7 +31,6 @@ class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
   late TextEditingController _celularCtrl;
   late TextEditingController _emailCtrl;
 
-  // Imágenes
   File? _newAvatarFile;
   File? _newFirmaFile;
   String? _currentAvatarUrl;
@@ -40,6 +39,7 @@ class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
   @override
   void initState() {
     super.initState();
+    _isAdminFuture = _isCurrentUserAdmin();
     _nombreCtrl = TextEditingController(text: widget.userData['nombre']);
     _dniCtrl = TextEditingController(text: widget.userData['dni']);
     _cargoCtrl = TextEditingController(text: widget.userData['cargo']);
@@ -62,7 +62,6 @@ class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
     super.dispose();
   }
 
-  // --- LÓGICA DE SUBIDA DE IMAGEN ---
   Future<void> _pickImage(bool isAvatar) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
@@ -78,26 +77,21 @@ class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
     }
   }
 
-// --- FUNCIÓN CLAVE: SUBIR A SUPABASE ---
 Future<String?> _uploadFileToSupabase(File file, String folder) async {
     try {
       final supabase = Supabase.instance.client;
       final fileExt = file.path.split('.').last;
-      // Usamos el ID del usuario para el nombre del archivo
       final fileName = 'usuarios/$folder/${widget.userId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
 
-      // 1. Subir el archivo
       await supabase.storage.from('AppMant').upload(
         fileName,
         file,
         fileOptions: const FileOptions(contentType: 'image/jpeg'),
       );
       
-      // 2. Obtener la URL pública (Retorna el String directamente)
       final String publicUrl = supabase.storage.from('AppMant').getPublicUrl(fileName);
       
-      // 3. Devolver la URL
-      return publicUrl; // ✅ CORREGIDO: Retornamos el String, no publicUrl.data
+      return publicUrl;
       
     } catch (e) {
       print("Error subiendo $folder: $e");
@@ -153,78 +147,76 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
 
   @override
   Widget build(BuildContext context) {
-    final String currentAuthEmail = FirebaseAuth.instance.currentUser?.email ?? '';
-    final String targetUserEmail = widget.userData['email'] ?? '';
-    
-    // Si el perfil es el mío O si mi rol es 'admin', puedo editar los campos restringidos.
-    final bool isAdmin = (widget.userData['rol'] == 'admin'); 
-    final bool isMyOwnProfile = (currentAuthEmail == targetUserEmail);
-    final bool canEditRestrictedFields = isAdmin; // Solo ADMIN puede cambiar cargo/área de CUALQUIERA
-
-    // Para evitar que un usuario normal cambie el cargo de otro, usamos una doble check.
-    final bool canEditThisProfile = isMyOwnProfile || isAdmin;
-
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: const Text("Editar Perfil"),
         actions: [
-           if (canEditThisProfile) // Solo mostrar si tiene permiso de editar ESTE perfil
-             if (_isSaving)
-               const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(color: Colors.white))
-             else
-               IconButton(icon: const Icon(Icons.save), onPressed: _saveUser)
+          FutureBuilder<bool>(
+            future: _isAdminFuture,
+            builder: (context, snapshot) {
+              if (snapshot.data != true) {
+                return const SizedBox.shrink();
+              }
+              if (_isSaving) {
+                return const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: CircularProgressIndicator(color: Colors.white),
+                );
+              }
+              return IconButton(icon: const Icon(Icons.save), onPressed: _saveUser);
+            },
+          ),
         ],
       ),
-      body: canEditThisProfile ? Form( // Mostrar el formulario si tiene permiso
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            // --- AVATAR ---
-            Center(
-              child: GestureDetector(
-                onTap: () => _pickImage(true), 
-                child: _buildAvatar(isMyOwnProfile),
-              ),
-            ),
-            const SizedBox(height: 20),
+      body: FutureBuilder<bool>(
+        future: _isAdminFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.data != true) {
+            return const Center(child: Text("Acceso restringido. Solo administradores."));
+          }
+          return Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                Center(
+                  child: GestureDetector(
+                    onTap: () => _pickImage(true),
+                    child: _buildAvatar(true),
+                  ),
+                ),
+                const SizedBox(height: 20),
 
-            // --- CAMPOS LIBRES (Nombre y Celular) ---
-            _buildTextField("Nombre Completo", _nombreCtrl, readOnly: _isSaving),
-            _buildTextField("DNI", _dniCtrl, isNumber: true, readOnly: _isSaving),
-            
-            // --- CAMPOS RESTRINGIDOS (CARGO Y ÁREA) ---
-            _buildTextField("Cargo", _cargoCtrl, readOnly: !canEditRestrictedFields || _isSaving, // Bloqueado si NO es admin
-                borderColor: !canEditRestrictedFields ? Colors.grey.shade400 : null),
-            _buildTextField("Área", _areaCtrl, readOnly: !canEditRestrictedFields || _isSaving, // Bloqueado si NO es admin
-                borderColor: !canEditRestrictedFields ? Colors.grey.shade400 : null),
-            
-            // --- CAMPOS DE CONTACTO ---
-            _buildTextField("Celular", _celularCtrl, isNumber: true, readOnly: _isSaving),
-            _buildTextField("Email", _emailCtrl, isEmail: true, readOnly: true, borderColor: Colors.grey.shade300,),
+                _buildTextField("Nombre y apellido", _nombreCtrl, readOnly: _isSaving, required: true),
+                _buildTextField("DNI", _dniCtrl, isNumber: true, readOnly: _isSaving, exactLength: 7, required: true),
+                _buildTextField("Cargo", _cargoCtrl, readOnly: _isSaving, required: true),
+                _buildTextField("Área", _areaCtrl, readOnly: _isSaving, required: false),
+                _buildTextField("Celular", _celularCtrl, isNumber: true, readOnly: _isSaving, exactLength: 9, required: false),
+                _buildTextField("Correo", _emailCtrl, isEmail: true, readOnly: true, required: false, borderColor: Colors.grey.shade300),
 
-            const SizedBox(height: 20),
-            
-            // --- FIRMA ---
-            const Text("Firma Digital", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF2C3E50))),
-            const SizedBox(height: 10),
-            GestureDetector(
-              onTap: () => _pickImage(false), // false = Firma
-              child: _buildFirma(),
+                const SizedBox(height: 20),
+
+                const Text("Firma Digital", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF2C3E50))),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () => _pickImage(false),
+                  child: _buildFirma(),
+                ),
+                const SizedBox(height: 40),
+              ],
             ),
-            const SizedBox(height: 40),
-          ],
-        ),
-      )
-      : const Center(child: Text("Acceso Denegado. Solo puedes editar tu propio perfil o ser Administrador.")),
+          );
+        },
+      ),
     );
   }
   
-  // WIDGETS AUXILIARES PARA EL BUILD
 
-  Widget _buildAvatar(bool isMyOwnProfile) {
+  Widget _buildAvatar(bool showCamera) {
       return Stack(
           children: [
               CircleAvatar(
@@ -239,7 +231,7 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
                       ? const Icon(Icons.person, size: 60, color: Colors.grey)
                       : null,
               ),
-              if (isMyOwnProfile) // Solo mostrar botón de cámara si es mi perfil
+              if (showCamera)
                 Positioned(
                   bottom: 0,
                   right: 0,
@@ -276,21 +268,69 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
       );
   }
 
-  Widget _buildTextField(String label, TextEditingController ctrl, {bool isNumber = false, bool isEmail = false, required bool readOnly, Color? borderColor}) {
+  Widget _buildTextField(
+    String label,
+    TextEditingController ctrl, {
+    bool isNumber = false,
+    bool isEmail = false,
+    required bool readOnly,
+    Color? borderColor,
+    int? exactLength,
+    bool required = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
       child: TextFormField(
         controller: ctrl,
-        readOnly: readOnly, // Aplicamos el bloqueo
+        readOnly: readOnly,
         keyboardType: isNumber ? TextInputType.number : (isEmail ? TextInputType.emailAddress : TextInputType.text),
         decoration: InputDecoration(
           labelText: label,
-          border: OutlineInputBorder(borderSide: BorderSide(color: borderColor ?? Colors.grey.shade300)), // Color de borde si está bloqueado
+          border: OutlineInputBorder(borderSide: BorderSide(color: borderColor ?? Colors.grey.shade300)),
           filled: true,
-          fillColor: readOnly ? Colors.grey[200] : Colors.white, // Fondo gris si está bloqueado
+          fillColor: readOnly ? Colors.grey[200] : Colors.white,
         ),
-        validator: (v) => v!.isEmpty ? 'Campo requerido' : null,
+        validator: (value) {
+          if (required && (value == null || value.isEmpty)) {
+            return 'Campo requerido';
+          }
+          if (value == null || value.isEmpty) {
+            return null;
+          }
+          if (exactLength != null && value.trim().length != exactLength) {
+            return 'Debe tener $exactLength dígitos';
+          }
+          if (isEmail && !_isValidEmail(value.trim())) {
+            return 'Correo inválido';
+          }
+          return null;
+        },
       ),
     );
+  }
+
+  Future<bool> _isCurrentUserAdmin() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return false;
+    }
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      return false;
+    }
+    final snapshot = await FirebaseFirestore.instance
+        .collection('usuarios')
+        .where('email', isEqualTo: email)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) {
+      return false;
+    }
+    return (snapshot.docs.first.data()['rol'] ?? '') == 'admin';
+  }
+
+  bool _isValidEmail(String value) {
+    final regex = RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
+    return regex.hasMatch(value);
   }
 }

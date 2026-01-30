@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:appmantflutter/reportes/lista_reportes_por_categoria_screen.dart'; // Importa la siguiente pantalla
+import 'package:appmantflutter/reportes/lista_reportes_por_categoria_screen.dart';
+import 'package:appmantflutter/shared/disciplinas_config.dart';
 
 class CategoriasReporteScreen extends StatelessWidget {
   final String disciplinaId;
@@ -18,11 +19,10 @@ class CategoriasReporteScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
-        // Título dinámico "Reportes de [Disciplina]"
         title: Text(
           "Reportes de $disciplinaNombre",
         ),
-        centerTitle: false,
+        centerTitle: true,
       ),
       body: Column(
         children: [
@@ -46,17 +46,16 @@ class CategoriasReporteScreen extends StatelessWidget {
               itemBuilder: (context, index) {
                 final item = categorias[index];
                 return _CategoriaCard(
-                  // Usamos el nombre de visualización
                   nombre: item['display_name'],
                   icon: item['icon'],
+                  color: disciplinaColor(disciplinaId),
                   onTap: () {
-                    // NAVEGACIÓN A LA LISTA DE REPORTES FILTRADA
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => ListaReportesPorCategoriaScreen(
-                          categoriaFilter: item['filter_value'], // <-- Valor en minúscula para el filtro de BD
-                          categoriaTitle: item['display_name'],  // <-- Nombre legible para el título
+                          categoriaFilter: item['filter_value'],
+                          categoriaTitle: item['display_name'],
                         ),
                       ),
                     );
@@ -70,12 +69,10 @@ class CategoriasReporteScreen extends StatelessWidget {
     );
   }
 
-  // --- BASE DE DATOS LOCAL DE CATEGORÍAS (SWITCH CASE) ---
   List<Map<String, dynamic>> _getCategorias(String id) {
     switch (id) {
       case 'electricas':
         return [
-          // display_name es para mostrar, filter_value es para la query de Firestore
           {'display_name': 'Luminarias', 'filter_value': 'luminarias', 'icon': Icons.lightbulb},
           {'display_name': 'Aparatos Eléctricos', 'filter_value': 'aparatos eléctricos', 'icon': Icons.smart_toy},
           {'display_name': 'Tableros Eléctricos', 'filter_value': 'tableros eléctricos', 'icon': Icons.flash_on},
@@ -103,15 +100,16 @@ class CategoriasReporteScreen extends StatelessWidget {
   }
 }
 
-// --- WIDGET DE LA TARJETA (Row style) ---
 class _CategoriaCard extends StatelessWidget {
-  final String nombre; // Este es ahora el nombre para visualización
+  final String nombre;
   final IconData icon;
+  final Color color;
   final VoidCallback onTap;
 
   const _CategoriaCard({
     required this.nombre,
     required this.icon,
+    required this.color,
     required this.onTap,
     super.key
   });
@@ -133,17 +131,17 @@ class _CategoriaCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+                onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
             child: Row(
               children: [
-                Icon(icon, size: 30, color: const Color(0xFF3498DB)),
+                Icon(icon, size: 30, color: color),
                 const SizedBox(width: 20),
                 Expanded(
                   child: Text(
-                    nombre, // Usamos el nombre de visualización
+                    nombre,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w500,

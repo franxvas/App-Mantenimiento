@@ -14,11 +14,10 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   
-  // Datos para Gráficos
   int _totalOperativos = 0;
   int _totalDefectuosos = 0;
   int _totalFueraServicio = 0;
-  List<int> _reportesPorDia = List.filled(7, 0); // Lun-Dom
+  List<int> _reportesPorDia = List.filled(7, 0);
   List<String> _labelsDias = List.filled(7, '');
   List<_TopEquipo> _topEquipos = [];
 
@@ -35,12 +34,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             fromFirestore: (snapshot, _) => snapshot.data() ?? {},
             toFirestore: (data, _) => data,
           );
-      final reportesRef = db.collectionGroup('reportes').withConverter<Map<String, dynamic>>(
+      final reportesRef = db.collection('reportes').withConverter<Map<String, dynamic>>(
         fromFirestore: (snapshot, _) => snapshot.data() ?? {},
         toFirestore: (data, _) => data,
       );
 
-      // 1. CARGAR ESTADO DE EQUIPOS
       final operativosSnapshot = await productosRef.where('estadoOperativo', isEqualTo: 'operativo').count().get();
       final defectuososSnapshot = await productosRef.where('estadoOperativo', isEqualTo: 'defectuoso').count().get();
       final fueraServicioSnapshot = await productosRef.where('estadoOperativo', isEqualTo: 'fuera_servicio').count().get();
@@ -49,7 +47,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _totalDefectuosos = defectuososSnapshot.count ?? 0;
       _totalFueraServicio = fueraServicioSnapshot.count ?? 0;
 
-      // 2. CARGAR REPORTES DE LA ÚLTIMA SEMANA
       final hoy = DateTime.now();
       final inicio = DateTime(hoy.year, hoy.month, hoy.day).subtract(const Duration(days: 6));
       final labelsDias = List.generate(
@@ -149,7 +146,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- GRÁFICO DE PASTEL ---
                   const Text("Estado del Inventario", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
                   const SizedBox(height: 20),
                   SizedBox(
@@ -200,7 +196,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                   const Divider(height: 40),
 
-                  // --- GRÁFICO DE BARRAS ---
                   const Text("Reportes: Últimos 7 Días", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
                   const SizedBox(height: 20),
                   SizedBox(
@@ -251,7 +246,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                   const Divider(height: 40),
 
-                  // --- TOP FALLAS (CORREGIDO) ---
                   const Text("Top Equipos con Reportes", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
                   const SizedBox(height: 10),
 

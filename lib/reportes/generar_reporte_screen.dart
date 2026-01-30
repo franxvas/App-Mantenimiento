@@ -17,7 +17,7 @@ class GenerarReporteScreen extends StatefulWidget {
     required this.productName,
     required this.productCategory,
     required this.initialStatus,
-    required this.productLocation, // Requerido en constructor
+    required this.productLocation,
   });
 
   @override
@@ -27,17 +27,14 @@ class GenerarReporteScreen extends StatefulWidget {
 class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
   final _formKey = GlobalKey<FormState>();
   
-  // --- 1. CONTROLADORES PARA TODOS LOS CAMPOS DE TEXTO ---
-  // Usamos controladores en lugar de variables String para asegurar la captura del texto
   final TextEditingController _descripcionCtrl = TextEditingController();
   final TextEditingController _comentariosCtrl = TextEditingController();
-  final TextEditingController _encargadoCtrl = TextEditingController(); // Ya existía
+  final TextEditingController _encargadoCtrl = TextEditingController();
   final TextEditingController _estadoDetectadoCtrl = TextEditingController();
   final TextEditingController _riesgoElectricoCtrl = TextEditingController();
   final TextEditingController _accionRecomendadaCtrl = TextEditingController();
   final TextEditingController _costoEstimadoCtrl = TextEditingController();
   
-  // Variables para Dropdowns/Selectores (estos sí se quedan como variables)
   String _nuevoEstado = 'OPERATIVO';
   String _condicionFisica = 'buena';
   String? _tipoReporte;
@@ -59,7 +56,6 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
 
   @override
   void dispose() {
-    // Limpiamos los controladores al salir para liberar memoria
     _descripcionCtrl.dispose();
     _comentariosCtrl.dispose();
     _encargadoCtrl.dispose();
@@ -70,12 +66,11 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     super.dispose();
   }
 
-  // --- FUNCIÓN DE AUTOLLENADO DE ENCARGADO ---
   Future<void> _autoFillEncargado() async {
     final user = FirebaseAuth.instance.currentUser;
     
     if (user != null) {
-      final name = user.displayName ?? user.email ?? '';
+      final name = await _resolveResponsableNombre(user);
       if (mounted) {
         setState(() {
           _encargadoCtrl.text = name;
@@ -84,7 +79,24 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     }
   }
 
-  // --- FUNCIÓN DE CONTADOR ATÓMICO ---
+  Future<String> _resolveResponsableNombre(User user) async {
+    final email = user.email;
+    if (email != null && email.isNotEmpty) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isNotEmpty) {
+        final nombre = snapshot.docs.first.data()['nombre']?.toString().trim();
+        if (nombre != null && nombre.isNotEmpty) {
+          return nombre;
+        }
+      }
+    }
+    return user.displayName ?? user.email ?? _encargadoCtrl.text.trim();
+  }
+
   Future<int> _getAndIncrementReportCounter() async {
     final counterRef = FirebaseFirestore.instance
         .collection('metadata')
@@ -109,12 +121,10 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     });
   }
 
-  // --- FUNCIÓN PARA GUARDAR REPORTE ---
   Future<void> _saveReport() async {
     if (_isSaving) return;
 
     if (!_formKey.currentState!.validate()) return;
-    // Ya no necesitamos _formKey.currentState!.save() porque usamos controladores
     
     setState(() {
       _isSaving = true;
@@ -138,7 +148,9 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       final fechaInspeccion = Timestamp.fromDate(_fechaInspeccion);
       final double? costoEstimado = _parseDouble(_costoEstimadoCtrl.text);
       final user = FirebaseAuth.instance.currentUser;
-      final responsableNombre = user?.displayName ?? user?.email ?? _encargadoCtrl.text.trim();
+      final responsableNombre = user != null
+          ? await _resolveResponsableNombre(user)
+          : _encargadoCtrl.text.trim();
       final responsableUid = user?.uid ?? '';
 
       final productsRef = FirebaseFirestore.instance
@@ -213,7 +225,6 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         updateData['fechaProximoMantenimiento'] = Timestamp.fromDate(fechaProximo);
       }
       if (costoEstimado != null) {
-        // Acumula el costo de mantenimiento de forma atómica.
         updateData['costoMantenimiento'] = FieldValue.increment(costoEstimado);
       }
 
@@ -256,7 +267,6 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
                 style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
             ),
             
-            // Usamos el nuevo helper que acepta controller
             _buildTipoReporteDropdown(),
             
             _buildReadOnlyField("Activo*", "${widget.productName}\n${widget.productCategory}"),
@@ -310,7 +320,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             _buildReadOnlyField("Encargado (usuario)", _encargadoCtrl.text),
             
             _buildTextField(
-              controller: _descripcionCtrl, // Asignamos controlador
+              controller: _descripcionCtrl,
               label: "Descripción del Reporte*",
               hint: "Describa el problema o la tarea realizada...",
               maxLines: 4,
@@ -363,11 +373,11 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               ),
 
             _buildTextField(
-              controller: _comentariosCtrl, // Asignamos controlador
+              controller: _comentariosCtrl,
               label: "Acciones Tomadas / Comentarios",
               hint: "Añada comentarios sobre las acciones tomadas o la solución...",
               maxLines: 3,
-              isRequired: false, // Hacemos este opcional
+              isRequired: false,
             ),
             
             const SizedBox(height: 30),
@@ -405,9 +415,8 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     );
   }
 
-  // --- 3. HELPER DE TEXTFIELD MODIFICADO PARA USAR CONTROLLER ---
   Widget _buildTextField({
-    required TextEditingController controller, // Ahora el controlador es obligatorio
+    required TextEditingController controller,
     required String label, 
     required String hint, 
     int maxLines = 1, 
@@ -418,7 +427,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: TextFormField(
-        controller: controller, // Conectamos el controlador
+        controller: controller,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
