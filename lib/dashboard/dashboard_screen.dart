@@ -206,7 +206,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             BarChartData(
                               alignment: BarChartAlignment.spaceAround,
                               maxY: (_reportesPorDia.reduce((curr, next) => curr > next ? curr : next) + 2).toDouble(),
-                              barTouchData: BarTouchData(enabled: true),
+                              barTouchData: BarTouchData(
+                                enabled: true,
+                                touchTooltipData: BarTouchTooltipData(
+                                  tooltipBgColor: const Color(0xFF8B1E1E),
+                                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                    final value = rod.toY.round();
+                                    return BarTooltipItem(
+                                      '$value',
+                                      const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                    );
+                                  },
+                                ),
+                              ),
                               titlesData: FlTitlesData(
                                 show: true,
                                 bottomTitles: AxisTitles(

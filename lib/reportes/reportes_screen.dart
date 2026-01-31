@@ -6,11 +6,11 @@ class ReportesScreen extends StatelessWidget {
   const ReportesScreen({super.key});
 
   static final List<Map<String, dynamic>> disciplinasReporte = [
-    {'id': 'arquitectura', 'nombre': 'Arquitectura', 'icon': Icons.account_balance, 'color': disciplinaColor('arquitectura')},
-    {'id': 'electricas', 'nombre': 'Eléctricas', 'icon': Icons.bolt, 'color': disciplinaColor('electricas')},
-    {'id': 'estructuras', 'nombre': 'Estructuras', 'icon': Icons.apartment, 'color': disciplinaColor('estructuras')},
-    {'id': 'mecanica', 'nombre': 'Mecánica', 'icon': Icons.miscellaneous_services, 'color': disciplinaColor('mecanica')},
-    {'id': 'sanitarias', 'nombre': 'Sanitarias', 'icon': Icons.water_drop, 'color': disciplinaColor('sanitarias')},
+    {'id': 'arquitectura', 'nombre': 'Arquitectura', 'icon': Icons.account_balance, 'color': primaryRed},
+    {'id': 'electricas', 'nombre': 'Eléctricas', 'icon': Icons.bolt, 'color': primaryRed},
+    {'id': 'estructuras', 'nombre': 'Estructuras', 'icon': Icons.apartment, 'color': primaryRed},
+    {'id': 'mecanica', 'nombre': 'Mecánica', 'icon': Icons.miscellaneous_services, 'color': primaryRed},
+    {'id': 'sanitarias', 'nombre': 'Sanitarias', 'icon': Icons.water_drop, 'color': primaryRed},
   ];
 
   @override

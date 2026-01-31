@@ -28,7 +28,14 @@ class PdfService {
       }
     }
 
-    final pdf = pw.Document();
+    final fontRegular = await pw.PdfGoogleFonts.notoSansRegular();
+    final fontBold = await pw.PdfGoogleFonts.notoSansBold();
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fontRegular,
+        bold: fontBold,
+      ),
+    );
 
     try {
       pdf.addPage(
@@ -43,7 +50,7 @@ class PdfService {
               pw.SizedBox(height: 20),
               _buildPdfSection("Ubicación", _buildLocationInfo(producto)),
               pw.SizedBox(height: 10),
-              _buildPdfSection("Historial de reportes (últimos 5)", _buildReportsTable(ultimosReportes)),
+              _buildPdfSection("Historial de reportes (últimos 3)", _buildReportsTable(ultimosReportes)),
               pw.SizedBox(height: 30),
               _buildFooter(),
             ];
@@ -51,10 +58,7 @@ class PdfService {
         ),
       );
 
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save(),
-        name: 'Ficha_${producto['nombre']}.pdf',
-      );
+      await Printing.sharePdf(bytes: await pdf.save(), filename: 'Ficha_${producto['nombre']}.pdf');
       
     } catch (e) {
         print("ERROR GENERANDO FICHA TÉCNICA: $e");
@@ -66,19 +70,45 @@ class PdfService {
     required Map<String, dynamic> reporte,
     required String reportId,
   }) async {
-    final pdf = pw.Document();
+    final fontRegular = await pw.PdfGoogleFonts.notoSansRegular();
+    final fontBold = await pw.PdfGoogleFonts.notoSansBold();
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fontRegular,
+        bold: fontBold,
+      ),
+    );
     
     final String nro = reporte['nro'] ?? '0000';
     final String fecha = _formatDate(reporte['fechaInspeccion'] ?? reporte['fecha']);
     final String nombreEquipo = reporte['activo_nombre'] ?? reporte['activoNombre'] ?? 'N/A';
     final String estadoNuevo =
         (reporte['estadoNuevo'] ?? reporte['estadoOperativo'] ?? reporte['estado_nuevo'] ?? reporte['estado'])
-            ?.toString()
-            .toUpperCase() ??
+            ?.toString() ??
         'N/A';
     final Map<String, dynamic> ubicacion = reporte['ubicacion'] ?? {};
-    final String responsable = reporte['responsableNombre'] ?? reporte['responsable'] ?? reporte['encargado'] ?? 'N/A';
+    final String responsable = _resolveResponsableName(reporte);
     final String tipoReporte = reporte['tipoReporte'] ?? reporte['tipo_reporte'] ?? 'General';
+    final String tipoReporteLabel = _formatTitleCase(tipoReporte);
+    final String estadoFinalLabel = _formatTitleCase(estadoNuevo);
+    final String estadoAnteriorLabel = _formatTitleCase(reporte['estadoAnterior']?.toString() ?? '');
+    final String estadoDetectadoLabel = _formatTitleCase(reporte['estadoDetectado']?.toString() ?? '');
+    final String estadoNuevoLabel = _formatTitleCase(
+      reporte['estadoNuevo']?.toString() ??
+          reporte['estadoOperativo']?.toString() ??
+          reporte['estado_nuevo']?.toString() ??
+          reporte['estado']?.toString() ??
+          '',
+    );
+    final String disciplinaLabel = _formatTitleCase(reporte['disciplina']?.toString() ?? '');
+    final String condicionFisicaLabel = _formatTitleCase(reporte['condicionFisica']?.toString() ?? '');
+    final String tipoMantenimientoLabel = _formatTitleCase(reporte['tipoMantenimiento']?.toString() ?? '');
+    final String nivelCriticidadLabel = _formatTitleCase(reporte['nivelCriticidad']?.toString() ?? '');
+    final String impactoFallaLabel = _formatTitleCase(reporte['impactoFalla']?.toString() ?? '');
+    final String riesgoNormativoLabel = _formatTitleCase(reporte['riesgoNormativo']?.toString() ?? '');
+    final String riesgoElectricoLabel = _formatTitleCase(reporte['riesgoElectrico']?.toString() ?? '');
+    final String accionRecomendadaLabel = _formatTitleCase(reporte['accionRecomendada']?.toString() ?? '');
+    final bool esReemplazo = _normalizeKey(tipoReporte) == 'reemplazo';
     final String requiereReemplazo = reporte['requiereReemplazo'] == null
         ? ''
         : (reporte['requiereReemplazo'] == true ? 'Sí' : 'No');
@@ -101,8 +131,8 @@ class PdfService {
                   children: [
                     _infoRow("Fecha de Emisión:", fecha),
                     _infoRow("Responsable:", responsable),
-                    _infoRow("Tipo de Reporte:", tipoReporte),
-                    _infoRow("Estado Final del Equipo:", estadoNuevo),
+                    _infoRow("Tipo de Reporte:", tipoReporteLabel),
+                    _infoRow("Estado Final del Equipo:", estadoFinalLabel),
                   ],
                 ),
               ),
@@ -113,7 +143,7 @@ class PdfService {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     _infoRow("Equipo:", nombreEquipo),
-                    _infoRow("Categoría:", reporte['categoria']),
+                    _infoRow("Categoría:", _formatTitleCase(reporte['categoria']?.toString() ?? '')),
                     _infoRow("ID Sistema:", reporte['productId']),
                   ],
                 ),
@@ -135,18 +165,19 @@ class PdfService {
                 "Detalles del Reporte",
                 _buildPills(
                   [
-                    _PillData(label: 'Disciplina', value: reporte['disciplina']),
-                    _PillData(label: 'Estado detectado', value: reporte['estadoDetectado']),
-                    _PillData(label: 'Estado anterior', value: reporte['estadoAnterior']),
-                    _PillData(label: 'Condición física', value: reporte['condicionFisica']),
-                    _PillData(label: 'Tipo mantenimiento', value: reporte['tipoMantenimiento']),
-                    _PillData(label: 'Nivel criticidad', value: reporte['nivelCriticidad']),
-                    _PillData(label: 'Impacto falla', value: reporte['impactoFalla']),
-                    _PillData(label: 'Riesgo normativo', value: reporte['riesgoNormativo']),
-                    _PillData(label: 'Riesgo eléctrico', value: reporte['riesgoElectrico']),
-                    _PillData(label: 'Acción recomendada', value: reporte['accionRecomendada']),
+                    _PillData(label: 'Disciplina', value: disciplinaLabel),
+                    _PillData(label: 'Estado detectado', value: estadoDetectadoLabel),
+                    _PillData(label: 'Estado anterior', value: estadoAnteriorLabel),
+                    _PillData(label: 'Estado nuevo', value: estadoNuevoLabel),
+                    _PillData(label: 'Condición física', value: condicionFisicaLabel),
+                    _PillData(label: 'Tipo mantenimiento', value: tipoMantenimientoLabel),
+                    _PillData(label: 'Nivel criticidad', value: nivelCriticidadLabel),
+                    _PillData(label: 'Impacto falla', value: impactoFallaLabel),
+                    _PillData(label: 'Riesgo normativo', value: riesgoNormativoLabel),
+                    _PillData(label: 'Riesgo eléctrico', value: riesgoElectricoLabel),
+                    _PillData(label: 'Acción recomendada', value: accionRecomendadaLabel),
                     _PillData(label: 'Costo estimado', value: costoEstimado),
-                    _PillData(label: 'Requiere reemplazo', value: requiereReemplazo),
+                    if (!esReemplazo) _PillData(label: 'Requiere reemplazo', value: requiereReemplazo),
                   ],
                 ),
               ),
@@ -275,7 +306,7 @@ class PdfService {
         pw.Container(
           padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blue900), borderRadius: pw.BorderRadius.circular(4)),
-          child: pw.Text(data['estado']?.toUpperCase() ?? 'N/A', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+          child: pw.Text(_formatTitleCase(data['estado']?.toString() ?? 'N/A'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
         ),
       ],
     );
@@ -294,8 +325,8 @@ class PdfService {
               _infoRow("Marca:", data['marca']),
               _infoRow("Serie:", data['serie']),
               _infoRow("Código QR:", data['codigoQR']),
-              _infoRow("Categoría:", data['categoria']),
-              _infoRow("Disciplina:", data['disciplina']),
+              _infoRow("Categoría:", _formatTitleCase(data['categoria']?.toString() ?? '')),
+              _infoRow("Disciplina:", _formatTitleCase(data['disciplina']?.toString() ?? '')),
               pw.SizedBox(height: 10),
               pw.Text("Descripción:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               pw.Text(data['descripcion'] ?? 'Sin descripción', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
@@ -349,20 +380,23 @@ class PdfService {
       final sorted = List<Map<String, dynamic>>.from(reportes)
         ..sort((a, b) => _resolveDate(b['fechaInspeccion'] ?? b['fecha'])
             .compareTo(_resolveDate(a['fechaInspeccion'] ?? a['fecha'])));
-      final latest = sorted.take(5).toList();
+      final latest = sorted.take(3).toList();
 
       return pw.Column(
         children: latest.map((reporte) {
           final tipoReporte = reporte['tipoReporte'] ?? reporte['tipo_reporte'] ?? 'General';
+          final estadoAnterior = reporte['estadoAnterior'] ?? 'N/A';
           final estadoOperativo = reporte['estadoOperativo'] ?? reporte['estadoNuevo'] ?? reporte['estado_nuevo'] ?? 'N/A';
           final tipoMantenimiento = reporte['tipoMantenimiento'];
           final fechaRaw = reporte['fechaInspeccion'] ?? reporte['fecha'];
           final fecha = _formatDate(fechaRaw);
           final requiereReemplazo = reporte['requiereReemplazo'];
-          final isReemplazo = tipoReporte == 'reemplazo';
-          final showRequiere = tipoReporte == 'mantenimiento' ||
-              tipoReporte == 'inspeccion' ||
-              tipoReporte == 'incidente_falla';
+          final isReemplazo = _normalizeKey(tipoReporte) == 'reemplazo';
+          final showRequiere = !isReemplazo &&
+              (_normalizeKey(tipoReporte) == 'mantenimiento' ||
+                  _normalizeKey(tipoReporte) == 'inspeccion' ||
+                  _normalizeKey(tipoReporte) == 'incidente falla' ||
+                  _normalizeKey(tipoReporte) == 'incidente_falla');
 
           return pw.Container(
             margin: const pw.EdgeInsets.only(bottom: 8),
@@ -375,24 +409,12 @@ class PdfService {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                _infoRow("Tipo de reporte:", tipoReporte.toString()),
-                _infoRow("Estado operativo:", estadoOperativo.toString()),
-                if (tipoReporte == 'mantenimiento' && tipoMantenimiento != null)
-                  _infoRow("Tipo de mantenimiento:", tipoMantenimiento.toString()),
+                _infoRow("Tipo de reporte:", _formatTitleCase(tipoReporte.toString())),
+                _infoRow("Estado anterior:", _formatTitleCase(estadoAnterior.toString())),
+                _infoRow("Estado nuevo:", _formatTitleCase(estadoOperativo.toString())),
+                if (_normalizeKey(tipoReporte) == 'mantenimiento' && tipoMantenimiento != null)
+                  _infoRow("Tipo de mantenimiento:", _formatTitleCase(tipoMantenimiento.toString())),
                 _infoRow("Fecha:", fecha),
-                pw.Row(
-                  children: [
-                    pw.Text("Reemplazo:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                    pw.SizedBox(width: 6),
-                    pw.Text(
-                      isReemplazo ? "✅" : "❌",
-                      style: pw.TextStyle(
-                        color: isReemplazo ? PdfColors.green800 : PdfColors.red800,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
                 if (showRequiere)
                   _infoRow(
                     "Requiere reemplazo:",
@@ -435,7 +457,58 @@ class PdfService {
     if (value == null) {
       return '';
     }
-    return value.toString();
+    if (value is num) {
+      if (value % 1 == 0) {
+        return value.toInt().toString();
+      }
+      return value.toString();
+    }
+    final text = value.toString();
+    return text.replaceAll(RegExp(r'\.0$'), '');
+  }
+
+  static String _formatTitleCase(String value) {
+    if (value.contains('@') || value.contains('/')) {
+      return value;
+    }
+    final normalized = value.replaceAll('_', ' ').trim();
+    if (normalized.isEmpty) {
+      return value;
+    }
+    return normalized
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) {
+            return word;
+          }
+          final lower = word.toLowerCase();
+          return '${lower[0].toUpperCase()}${lower.substring(1)}';
+        })
+        .join(' ');
+  }
+
+  static String _normalizeKey(dynamic value) {
+    return value.toString().toLowerCase().replaceAll('_', ' ').trim();
+  }
+
+  static String _resolveResponsableName(Map<String, dynamic> reporte) {
+    final String? responsableNombre = reporte['responsableNombre']?.toString().trim();
+    if (responsableNombre != null && responsableNombre.isNotEmpty) {
+      return responsableNombre;
+    }
+    final String? responsable = reporte['responsable']?.toString().trim();
+    if (responsable != null && responsable.isNotEmpty) {
+      if (responsable.contains('@')) {
+        final namePart = responsable.split('@').first.replaceAll('.', ' ');
+        return _formatTitleCase(namePart);
+      }
+      return responsable;
+    }
+    final String? encargado = reporte['encargado']?.toString().trim();
+    if (encargado != null && encargado.isNotEmpty) {
+      return encargado;
+    }
+    return 'N/A';
   }
 
   static pw.Widget _infoRow(String label, String? value) {

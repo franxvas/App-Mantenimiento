@@ -15,11 +15,11 @@ class DisciplinasScreen extends StatelessWidget {
   const DisciplinasScreen({super.key});
 
   static final List<DisciplinaData> disciplinas = [
-    DisciplinaData('arquitectura', 'Arquitectura', Icons.account_balance, disciplinaColor('arquitectura')),
-    DisciplinaData('electricas', 'Eléctricas', Icons.bolt, disciplinaColor('electricas')),
-    DisciplinaData('estructuras', 'Estructuras', Icons.domain, disciplinaColor('estructuras')),
-    DisciplinaData('mecanica', 'Mecánica', Icons.settings, disciplinaColor('mecanica')),
-    DisciplinaData('sanitarias', 'Sanitarias', Icons.water_drop, disciplinaColor('sanitarias')),
+    DisciplinaData('arquitectura', 'Arquitectura', Icons.account_balance, primaryRed),
+    DisciplinaData('electricas', 'Eléctricas', Icons.bolt, primaryRed),
+    DisciplinaData('estructuras', 'Estructuras', Icons.domain, primaryRed),
+    DisciplinaData('mecanica', 'Mecánica', Icons.settings, primaryRed),
+    DisciplinaData('sanitarias', 'Sanitarias', Icons.water_drop, primaryRed),
   ];
 
   @override
@@ -50,14 +50,11 @@ class DisciplinasScreen extends StatelessWidget {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(15),
               child: Wrap(
-                spacing: 15,
-                runSpacing: 15,
+                spacing: 20,
+                runSpacing: 20,
                 alignment: WrapAlignment.center,
                 children: disciplinas.map((item) {
-                  return SizedBox(
-                    width: (MediaQuery.of(context).size.width / 2) - 22,
-                    child: _DisciplinaCard(item: item),
-                  );
+                  return _DisciplinaCard(item: item);
                 }).toList(),
               ),
             ),
@@ -75,6 +72,7 @@ class _DisciplinaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double cardSize = (MediaQuery.of(context).size.width / 2) - 30;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -94,25 +92,29 @@ class _DisciplinaCard extends StatelessWidget {
           );
         },
         borderRadius: BorderRadius.circular(12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              item.icon,
-              size: 40,
-              color: item.color,
-            ),
-            const SizedBox(height: 15),
-            Text(
-              item.nombre,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF34495e),
+        child: SizedBox(
+          width: cardSize,
+          height: cardSize * 0.85,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                item.icon,
+                size: 40,
+                color: item.color,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: 15),
+              Text(
+                item.nombre,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF34495e),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );

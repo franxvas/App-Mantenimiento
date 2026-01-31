@@ -209,23 +209,23 @@ class DetalleReporteScreen extends StatelessWidget {
     final ubicacion = data['ubicacion'] ?? {};
     final fields = <_DetailField>[
       _DetailField(label: "Responsable", value: _resolveResponsableName(data)),
-      _DetailField(label: "Tipo de Reporte", value: data['tipoReporte'] ?? data['tipo_reporte']),
-      _DetailField(label: "Disciplina", value: data['disciplina']),
-      _DetailField(label: "Categoría", value: data['categoria']),
+      _DetailField(label: "Tipo de Reporte", value: _formatDisplayValue(data['tipoReporte'] ?? data['tipo_reporte'])),
+      _DetailField(label: "Disciplina", value: _formatDisplayValue(data['disciplina'])),
+      _DetailField(label: "Categoría", value: _formatDisplayValue(data['categoria'])),
       _DetailField(label: "ID Sistema", value: data['productId']),
-      _DetailField(label: "Bloque", value: ubicacion['bloque']),
-      _DetailField(label: "Nivel", value: ubicacion['nivel'] ?? ubicacion['piso']),
-      _DetailField(label: "Área", value: ubicacion['area']),
-      _DetailField(label: "Estado anterior", value: data['estadoAnterior']),
-      _DetailField(label: "Estado detectado", value: data['estadoDetectado']),
-      _DetailField(label: "Estado nuevo", value: data['estadoNuevo'] ?? data['estadoOperativo'] ?? data['estado']),
-      _DetailField(label: "Condición física", value: data['condicionFisica']),
-      _DetailField(label: "Tipo mantenimiento", value: data['tipoMantenimiento']),
-      _DetailField(label: "Nivel criticidad", value: data['nivelCriticidad']),
-      _DetailField(label: "Impacto falla", value: data['impactoFalla']),
-      _DetailField(label: "Riesgo normativo", value: data['riesgoNormativo']),
-      _DetailField(label: "Riesgo eléctrico", value: data['riesgoElectrico']),
-      _DetailField(label: "Acción recomendada", value: data['accionRecomendada']),
+      _DetailField(label: "Bloque", value: _formatDisplayValue(ubicacion['bloque'])),
+      _DetailField(label: "Nivel", value: _formatDisplayValue(ubicacion['nivel'] ?? ubicacion['piso'])),
+      _DetailField(label: "Área", value: _formatDisplayValue(ubicacion['area'])),
+      _DetailField(label: "Estado anterior", value: _formatDisplayValue(data['estadoAnterior'])),
+      _DetailField(label: "Estado detectado", value: _formatDisplayValue(data['estadoDetectado'])),
+      _DetailField(label: "Estado nuevo", value: _formatDisplayValue(data['estadoNuevo'] ?? data['estadoOperativo'] ?? data['estado'])),
+      _DetailField(label: "Condición física", value: _formatDisplayValue(data['condicionFisica'])),
+      _DetailField(label: "Tipo mantenimiento", value: _formatDisplayValue(data['tipoMantenimiento'])),
+      _DetailField(label: "Nivel criticidad", value: _formatDisplayValue(data['nivelCriticidad'])),
+      _DetailField(label: "Impacto falla", value: _formatDisplayValue(data['impactoFalla'])),
+      _DetailField(label: "Riesgo normativo", value: _formatDisplayValue(data['riesgoNormativo'])),
+      _DetailField(label: "Riesgo eléctrico", value: _formatDisplayValue(data['riesgoElectrico'])),
+      _DetailField(label: "Acción recomendada", value: _formatDisplayValue(data['accionRecomendada'])),
       _DetailField(label: "Costo estimado", value: _formatNumber(data['costoEstimado'])),
       _DetailField(
         label: "Requiere reemplazo",
@@ -246,17 +246,68 @@ class DetalleReporteScreen extends StatelessWidget {
   }
 
   String _resolveResponsableName(Map<String, dynamic> data) {
-    return data['responsableNombre'] ??
-        data['responsable'] ??
-        data['encargado'] ??
-        '--';
+    final String? responsableNombre = data['responsableNombre']?.toString().trim();
+    if (responsableNombre != null && responsableNombre.isNotEmpty) {
+      return responsableNombre;
+    }
+    final String? responsable = data['responsable']?.toString().trim();
+    if (responsable != null && responsable.isNotEmpty) {
+      if (responsable.contains('@')) {
+        final namePart = responsable.split('@').first.replaceAll('.', ' ');
+        return _formatTitleCase(namePart);
+      }
+      return responsable;
+    }
+    final String? encargado = data['encargado']?.toString().trim();
+    if (encargado != null && encargado.isNotEmpty) {
+      return encargado;
+    }
+    return '--';
   }
 
   String _formatNumber(dynamic value) {
     if (value == null) {
       return '';
     }
-    return value.toString();
+    if (value is num) {
+      if (value % 1 == 0) {
+        return value.toInt().toString();
+      }
+      return value.toString();
+    }
+    final text = value.toString();
+    return text.replaceAll(RegExp(r'\.0$'), '');
+  }
+
+  String? _formatDisplayValue(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    final text = value.toString().trim();
+    if (text.isEmpty) {
+      return null;
+    }
+    return _formatTitleCase(text);
+  }
+
+  String _formatTitleCase(String value) {
+    if (value.contains('@') || value.contains('/')) {
+      return value;
+    }
+    final normalized = value.replaceAll('_', ' ').trim();
+    if (normalized.isEmpty) {
+      return value;
+    }
+    return normalized
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) {
+            return word;
+          }
+          final lower = word.toLowerCase();
+          return '${lower[0].toUpperCase()}${lower.substring(1)}';
+        })
+        .join(' ');
   }
   
 }
