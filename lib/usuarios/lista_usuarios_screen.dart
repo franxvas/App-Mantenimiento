@@ -42,7 +42,7 @@ class ListaUsuariosScreen extends StatelessWidget {
               crossAxisCount: 2,
               crossAxisSpacing: 15,
               mainAxisSpacing: 15,
-              childAspectRatio: 0.75,
+              childAspectRatio: 0.7,
             ),
             itemBuilder: (context, index) {
               final doc = docs[index];
@@ -122,7 +122,7 @@ class _UserGridCard extends StatelessWidget {
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(10.0),
+          padding: const EdgeInsets.all(12.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -144,29 +144,33 @@ class _UserGridCard extends StatelessWidget {
               
               const SizedBox(height: 10),
 
-              Text(
-                nombre,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 16, 
-                  fontWeight: FontWeight.bold, 
-                  color: Color(0xFF2C3E50)
+              Flexible(
+                child: Text(
+                  nombre,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16, 
+                    fontWeight: FontWeight.bold, 
+                    color: Color(0xFF2C3E50)
+                  ),
                 ),
               ),
 
               const SizedBox(height: 6),
 
-              Text(
-                cargo.toUpperCase(),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11, 
-                  fontWeight: FontWeight.bold, 
-                  color: Color(0xFF3498DB)
+              Flexible(
+                child: Text(
+                  cargo.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11, 
+                    fontWeight: FontWeight.bold, 
+                    color: Color(0xFF3498DB)
+                  ),
                 ),
               ),
 

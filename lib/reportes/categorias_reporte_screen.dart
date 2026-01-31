@@ -48,7 +48,7 @@ class CategoriasReporteScreen extends StatelessWidget {
                 return _CategoriaCard(
                   nombre: item['display_name'],
                   icon: item['icon'],
-                  color: disciplinaColor(disciplinaId),
+                  color: primaryRed,
                   onTap: () {
                     Navigator.push(
                       context,
