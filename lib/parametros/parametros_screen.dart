@@ -24,6 +24,7 @@ class _ParametrosScreenState extends State<ParametrosScreen> {
     (key: 'sanitarias', label: 'Sanitarias', disciplinaValue: 'Sanitarias', enabled: true),
     (key: 'estructuras', label: 'Estructuras', disciplinaValue: 'Estructuras', enabled: true),
     (key: 'mecanica', label: 'Mecánica', disciplinaValue: 'Mecanica', enabled: true),
+    (key: 'mobiliarios', label: 'Mobiliarios', disciplinaValue: 'Mobiliarios', enabled: true),
   ];
 
   final _schemaService = ParametrosSchemaService();

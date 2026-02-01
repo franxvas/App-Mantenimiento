@@ -94,6 +94,12 @@ class CategoriasReporteScreen extends StatelessWidget {
         return [
           {'display_name': 'Griferías', 'filter_value': 'griferías', 'icon': Icons.water_drop},
         ];
+      case 'mobiliarios':
+        return [
+          {'display_name': 'Sillas', 'filter_value': 'sillas', 'icon': Icons.chair},
+          {'display_name': 'Mesas', 'filter_value': 'mesas', 'icon': Icons.table_restaurant},
+          {'display_name': 'Estantes', 'filter_value': 'estantes', 'icon': Icons.inventory_2},
+        ];
       default:
         return [];
     }

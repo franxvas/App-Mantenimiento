@@ -11,6 +11,7 @@ class ReportesScreen extends StatelessWidget {
     {'id': 'estructuras', 'nombre': 'Estructuras', 'icon': Icons.apartment, 'color': primaryRed},
     {'id': 'mecanica', 'nombre': 'Mecánica', 'icon': Icons.miscellaneous_services, 'color': primaryRed},
     {'id': 'sanitarias', 'nombre': 'Sanitarias', 'icon': Icons.water_drop, 'color': primaryRed},
+    {'id': 'mobiliarios', 'nombre': 'Mobiliarios', 'icon': Icons.chair, 'color': primaryRed},
   ];
 
   @override

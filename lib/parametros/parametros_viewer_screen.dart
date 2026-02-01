@@ -3,6 +3,7 @@ import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 
 import '../services/excel_export_service.dart';
+import '../services/usuarios_cache_service.dart';
 import '../scan/qr_scanner_screen.dart';
 import 'parametros_templates.dart';
 
@@ -122,149 +123,157 @@ class _ReportesViewer extends StatelessWidget {
           fromFirestore: (snapshot, _) => snapshot.data() ?? {},
           toFirestore: (data, _) => data,
         );
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: productsRef.where('disciplina', isEqualTo: disciplinaKey).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    return FutureBuilder<void>(
+      future: UsuariosCacheService.instance.preload(),
+      builder: (context, cacheSnapshot) {
+        if (cacheSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: productsRef.where('disciplina', isEqualTo: disciplinaKey).snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        if (!snapshot.hasData) {
-          return const Center(child: Text('No hay productos para reportes.'));
-        }
+            if (!snapshot.hasData) {
+              return const Center(child: Text('No hay productos para reportes.'));
+            }
 
-        final products = snapshot.data!.docs
-            .toList();
-        if (products.isEmpty) {
-          return const Center(child: Text('No hay productos para reportes.'));
-        }
-        final currentProductId = selectedProductId ?? products.first.id;
-        final currentProductDoc = products.firstWhere((doc) => doc.id == currentProductId, orElse: () => products.first);
-        if (currentProductId != selectedProductId) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            onProductSelected(currentProductId);
-          });
-        }
+            final products = snapshot.data!.docs.toList();
+            if (products.isEmpty) {
+              return const Center(child: Text('No hay productos para reportes.'));
+            }
+            final currentProductId = selectedProductId ?? products.first.id;
+            final currentProductDoc =
+                products.firstWhere((doc) => doc.id == currentProductId, orElse: () => products.first);
+            if (currentProductId != selectedProductId) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                onProductSelected(currentProductId);
+              });
+            }
 
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: DropdownButtonFormField<String>(
-                value: currentProductId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Activo'),
-                items: products
-                    .map(
-                      (doc) => DropdownMenuItem(
-                        value: doc.id,
-                        child: Text(
-                          doc.data()['nombreProducto']?.toString() ?? doc.data()['nombre']?.toString() ?? doc.id,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: onProductSelected,
-              ),
-            ),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: productsRef
-                    .doc(currentProductId)
-                    .collection('reportes')
-                    .withConverter<Map<String, dynamic>>(
-                      fromFirestore: (snapshot, _) => snapshot.data() ?? {},
-                      toFirestore: (data, _) => data,
-                    )
-                    .snapshots(),
-                builder: (context, reportSnapshot) {
-                  if (reportSnapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: DropdownButtonFormField<String>(
+                    value: currentProductId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Activo'),
+                    items: products
+                        .map(
+                          (doc) => DropdownMenuItem(
+                            value: doc.id,
+                            child: Text(
+                              doc.data()['nombreProducto']?.toString() ?? doc.data()['nombre']?.toString() ?? doc.id,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: onProductSelected,
+                  ),
+                ),
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: productsRef
+                        .doc(currentProductId)
+                        .collection('reportes')
+                        .withConverter<Map<String, dynamic>>(
+                          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+                          toFirestore: (data, _) => data,
+                        )
+                        .snapshots(),
+                    builder: (context, reportSnapshot) {
+                      if (reportSnapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                  if (!reportSnapshot.hasData) {
-                    return const Center(child: Text('No hay reportes disponibles.'));
-                  }
+                      if (!reportSnapshot.hasData) {
+                        return const Center(child: Text('No hay reportes disponibles.'));
+                      }
 
-                  final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(reportSnapshot.data!.docs)
-                    ..sort((a, b) {
-                      final dateA = _resolveReportDate(a.data());
-                      final dateB = _resolveReportDate(b.data());
-                      return dateB.compareTo(dateA);
-                    });
+                      final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(reportSnapshot.data!.docs)
+                        ..sort((a, b) {
+                          final dateA = _resolveReportDate(a.data());
+                          final dateB = _resolveReportDate(b.data());
+                          return dateB.compareTo(dateA);
+                        });
 
-                  final rows = sortedDocs
-                      .map(
-                        (doc) => DatasetRow.fromReporteDocument(
-                          doc,
-                          currentProductDoc,
-                          columns,
-                        ),
-                      )
-                      .toList();
+                      final rows = sortedDocs
+                          .map(
+                            (doc) => DatasetRow.fromReporteDocument(
+                              doc,
+                              currentProductDoc,
+                              columns,
+                            ),
+                          )
+                          .toList();
 
-                  return _ViewerContent(
-                    columns: columns,
-                    rows: rows,
-                    disciplinaLabel: disciplinaLabel,
-                    tipo: 'reportes',
-                    footerBuilder: (context, onGenerateExcel) {
-                      return Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => QRScannerScreen(
-                                        onProductFound: (productId) {
-                                          final matchesDisciplina = products.any((doc) => doc.id == productId);
-                                          if (!matchesDisciplina) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(
-                                                content: Text('El activo escaneado no pertenece a esta disciplina.'),
-                                              ),
-                                            );
-                                            return;
-                                          }
-                                          onProductSelected(productId);
-                                        },
-                                      ),
+                      return _ViewerContent(
+                        columns: columns,
+                        rows: rows,
+                        disciplinaLabel: disciplinaLabel,
+                        tipo: 'reportes',
+                        footerBuilder: (context, onGenerateExcel) {
+                          return Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => QRScannerScreen(
+                                            onProductFound: (productId) {
+                                              final matchesDisciplina = products.any((doc) => doc.id == productId);
+                                              if (!matchesDisciplina) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text('El activo escaneado no pertenece a esta disciplina.'),
+                                                  ),
+                                                );
+                                                return;
+                                              }
+                                              onProductSelected(productId);
+                                            },
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.qr_code_scanner),
+                                    label: const Text('Escanear Activo'),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
                                     ),
-                                  );
-                                },
-                                icon: const Icon(Icons.qr_code_scanner),
-                                label: const Text('Escanear Activo'),
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: onGenerateExcel,
-                                icon: const Icon(Icons.download),
-                                label: const Text('Generar Excel'),
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: onGenerateExcel,
+                                    icon: const Icon(Icons.download),
+                                    label: const Text('Generar Excel'),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       );
                     },
-                  );
-                },
-              ),
-            ),
-          ],
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );

@@ -4,6 +4,8 @@ class ActivoIdHelper {
     'sanitarias': 'SAN',
     'arquitectura': 'ARQ',
     'estructuras': 'EST',
+    'mecanica': 'MEC',
+    'mobiliarios': 'MOB',
   };
 
   static String buildPreview({

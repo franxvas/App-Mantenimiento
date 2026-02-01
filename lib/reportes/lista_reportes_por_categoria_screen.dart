@@ -21,7 +21,7 @@ class ListaReportesPorCategoriaScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
         title: Text("Reportes: $categoriaTitle"),
-        titleTextStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        titleTextStyle: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(fontWeight: FontWeight.bold),
         centerTitle: true,
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
