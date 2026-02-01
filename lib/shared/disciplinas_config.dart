@@ -6,6 +6,7 @@ const Map<String, Color> disciplinaColors = {
   'estructuras': Color(0xFF95a5a6),
   'mecanica': Color(0xFFe67e22),
   'sanitarias': Color(0xFF1abc9c),
+  'mobiliarios': Color(0xFF9b59b6),
 };
 
 const Color primaryRed = Color(0xFF8B1E1E);

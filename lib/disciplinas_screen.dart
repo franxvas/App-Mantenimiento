@@ -20,46 +20,43 @@ class DisciplinasScreen extends StatelessWidget {
     DisciplinaData('estructuras', 'Estructuras', Icons.domain, primaryRed),
     DisciplinaData('mecanica', 'Mecánica', Icons.settings, primaryRed),
     DisciplinaData('sanitarias', 'Sanitarias', Icons.water_drop, primaryRed),
+    DisciplinaData('mobiliarios', 'Mobiliarios', Icons.chair, primaryRed),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F5),
+      backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
         title: const Text('Disciplinas'),
         elevation: 0,
         centerTitle: true,
       ),
-      body: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Text(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Text(
               'Seleccione una Disciplina',
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF34495e),
+                color: Color(0xFF34495E),
               ),
               textAlign: TextAlign.center,
             ),
-          ),
-          
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(15),
-              child: Wrap(
-                spacing: 20,
-                runSpacing: 20,
-                alignment: WrapAlignment.center,
-                children: disciplinas.map((item) {
-                  return _DisciplinaCard(item: item);
-                }).toList(),
-              ),
+            const SizedBox(height: 30),
+            Wrap(
+              spacing: 20,
+              runSpacing: 20,
+              alignment: WrapAlignment.center,
+              children: disciplinas.map((item) {
+                return _DisciplinaCard(item: item);
+              }).toList(),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -73,11 +70,11 @@ class _DisciplinaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double cardSize = (MediaQuery.of(context).size.width / 2) - 30;
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Material(
       color: Colors.white,
-      surfaceTintColor: Colors.white,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(16),
+      shadowColor: Colors.black26,
       child: InkWell(
         onTap: () {
           Navigator.push(
@@ -91,16 +88,17 @@ class _DisciplinaCard extends StatelessWidget {
             ),
           );
         },
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
           width: cardSize,
           height: cardSize * 0.85,
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 item.icon,
-                size: 40,
+                size: 50,
                 color: item.color,
               ),
               const SizedBox(height: 15),
@@ -109,7 +107,7 @@ class _DisciplinaCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF34495e),
+                  color: Color(0xFF2C3E50),
                 ),
                 textAlign: TextAlign.center,
               ),

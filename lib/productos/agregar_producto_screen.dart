@@ -200,7 +200,10 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Agregar Producto"), titleTextStyle: const TextStyle(fontSize: 20)),
+      appBar: AppBar(
+        title: const Text("Agregar Producto"),
+        titleTextStyle: Theme.of(context).appBarTheme.titleTextStyle,
+      ),
       body: _isUploading 
         ? const Center(child: CircularProgressIndicator()) 
         : Form(
@@ -236,13 +239,18 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
               _buildDropdown(
                 "Disciplina",
                 _disciplina,
-                ['Electricas', 'Sanitarias', 'Estructuras', 'Arquitectura', 'Mecanica'],
+                ['Electricas', 'Sanitarias', 'Estructuras', 'Arquitectura', 'Mecanica', 'Mobiliarios'],
                 (v) {
                   _disciplina = v!;
                   _updateIdActivoPreview();
                 },
               ),
-              _buildDropdown("Categoría", _categoria, ['luminarias', 'tableros', 'bombas', 'otros'], (v) => setState(() => _categoria = v!)),
+              _buildDropdown(
+                "Categoría",
+                _categoria,
+                ['luminarias', 'tableros', 'bombas', 'sillas', 'mesas', 'estantes', 'otros'],
+                (v) => setState(() => _categoria = v!),
+              ),
               _buildTextField(
                 null,
                 "Subcategoría (Escribir manual)",

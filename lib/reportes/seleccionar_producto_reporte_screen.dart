@@ -27,7 +27,7 @@ class _SeleccionarProductoReporteScreenState extends State<SeleccionarProductoRe
     return Scaffold(
       appBar: AppBar(
         title: const Text("Seleccionar Producto"),
-        titleTextStyle: const TextStyle(fontSize: 18),
+        titleTextStyle: Theme.of(context).appBarTheme.titleTextStyle,
       ),
       body: Column(
         children: [

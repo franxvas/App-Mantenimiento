@@ -21,7 +21,7 @@ class ListaProductosScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
         title: Text(title),
-        titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        titleTextStyle: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(fontWeight: FontWeight.bold),
       ),
       body: SingleChildScrollView(
         child: Column(

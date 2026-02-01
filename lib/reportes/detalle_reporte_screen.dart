@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:appmantflutter/services/pdf_service.dart'; 
+import 'package:appmantflutter/services/pdf_service.dart';
+import 'package:appmantflutter/services/usuarios_cache_service.dart';
 
 class DetalleReporteScreen extends StatelessWidget {
   final String reportId;
@@ -40,90 +41,101 @@ class DetalleReporteScreen extends StatelessWidget {
             )
             .doc(reportId);
 
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: reportDocRef.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    return FutureBuilder<void>(
+      future: UsuariosCacheService.instance.preload(),
+      builder: (context, cacheSnapshot) {
+        if (cacheSnapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-        if (snapshot.hasError) return Scaffold(appBar: AppBar(), body: Center(child: Text("Error: ${snapshot.error}")));
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return Scaffold(appBar: AppBar(), body: const Center(child: Text("Reporte no encontrado.")));
-        }
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: reportDocRef.snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+            if (snapshot.hasError) return Scaffold(appBar: AppBar(), body: Center(child: Text("Error: ${snapshot.error}")));
+            if (!snapshot.hasData || !snapshot.data!.exists) {
+              return Scaffold(appBar: AppBar(), body: const Center(child: Text("Reporte no encontrado.")));
+            }
 
-        final data = snapshot.data!.data() ?? <String, dynamic>{};
-        final String estado = data['estadoOperativo'] ??
-            data['estadoDetectado'] ??
-            data['estado_nuevo'] ??
-            data['estado'] ??
-            'registrado';
-        final bool isCompleted = estado.toLowerCase() == 'completado' || estado.toLowerCase() == 'operativo';
-        
-        final Timestamp? tsFecha = data['fechaInspeccion'] ?? data['fecha'];
-        final String fechaDisplay = tsFecha != null
-            ? DateFormat('dd/MM/yyyy - HH:mm').format(tsFecha.toDate())
-            : '--/--/----';
+            final data = snapshot.data!.data() ?? <String, dynamic>{};
+            final String estado = data['estadoOperativo'] ??
+                data['estadoDetectado'] ??
+                data['estado_nuevo'] ??
+                data['estado'] ??
+                'registrado';
+            final bool isCompleted = estado.toLowerCase() == 'completado' || estado.toLowerCase() == 'operativo';
 
-        final String comentarios = data['comentarios'] ?? '';
-        final bool haySolucion = comentarios.isNotEmpty;
+            final Timestamp? tsFecha = data['fechaInspeccion'] ?? data['fecha'];
+            final String fechaDisplay = tsFecha != null
+                ? DateFormat('dd/MM/yyyy - HH:mm').format(tsFecha.toDate())
+                : '--/--/----';
 
-        return Scaffold(
-          backgroundColor: const Color(0xFFF0F2F5),
-          appBar: AppBar(
-            title: const Text("Detalle del Reporte"),
-          ),
-          
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () async {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Generando PDF del reporte...')),
-                );
+            final String comentarios = data['comentarios'] ?? '';
+            final bool haySolucion = comentarios.isNotEmpty;
 
-                try {
-                  await PdfService.generarReporte(
-                    reporte: data, 
-                    reportId: reportId,
-                  );
-                } catch (e) {
-                  print("Error PDF Reporte: $e");
+            return Scaffold(
+              backgroundColor: const Color(0xFFF0F2F5),
+              appBar: AppBar(
+                title: const Text("Detalle del Reporte"),
+              ),
+
+              floatingActionButton: FloatingActionButton.extended(
+                onPressed: () async {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error al generar PDF: $e')),
+                    const SnackBar(content: Text('Generando PDF del reporte...')),
                   );
-                }
-            },
-            label: const Text("Exportar PDF", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
-          ),
 
-          body: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(data, estado, isCompleted, fechaDisplay),
-                
-                _buildSection(
-                  title: "Problema Reportado",
-                  icon: FontAwesomeIcons.triangleExclamation,
-                  content: Text(data['descripcion'] ?? data['motivo'] ?? 'Sin descripción del problema.', style: const TextStyle(fontSize: 15, color: Color(0xFF666666))),
-                ),
-                
-                _buildSection(
-                  title: "Acciones Tomadas / Solución",
-                  icon: FontAwesomeIcons.screwdriverWrench,
-                  content: Text(
-                    haySolucion ? comentarios : 'Pendiente de solución o acciones no registradas.', 
-                    style: TextStyle(
-                      fontSize: 15, 
-                      color: haySolucion ? const Color(0xFF666666) : Colors.red[700]
+                  try {
+                    await PdfService.generarReporte(
+                      reporte: data,
+                      reportId: reportId,
+                    );
+                  } catch (e) {
+                    print("Error PDF Reporte: $e");
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error al generar PDF: $e')),
+                    );
+                  }
+                },
+                label: const Text("Exportar PDF", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+              ),
+
+              body: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(data, estado, isCompleted, fechaDisplay),
+
+                    _buildSection(
+                      title: "Problema Reportado",
+                      icon: FontAwesomeIcons.triangleExclamation,
+                      content: Text(
+                        data['descripcion'] ?? data['motivo'] ?? 'Sin descripción del problema.',
+                        style: const TextStyle(fontSize: 15, color: Color(0xFF666666)),
+                      ),
                     ),
-                  ),
-                ),
 
-                _buildDetails(data),
-                const SizedBox(height: 50),
-              ],
-            ),
-          ),
+                    _buildSection(
+                      title: "Acciones Tomadas / Solución",
+                      icon: FontAwesomeIcons.screwdriverWrench,
+                      content: Text(
+                        haySolucion ? comentarios : 'Pendiente de solución o acciones no registradas.',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: haySolucion ? const Color(0xFF666666) : Colors.red[700],
+                        ),
+                      ),
+                    ),
+
+                    _buildDetails(data),
+                    const SizedBox(height: 50),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -208,7 +220,7 @@ class DetalleReporteScreen extends StatelessWidget {
   Widget _buildDetails(Map<String, dynamic> data) {
     final ubicacion = data['ubicacion'] ?? {};
     final fields = <_DetailField>[
-      _DetailField(label: "Responsable", value: _resolveResponsableName(data)),
+      _DetailField(label: "Responsable", value: UsuariosCacheService.instance.resolveResponsableName(data)),
       _DetailField(label: "Tipo de Reporte", value: _formatDisplayValue(data['tipoReporte'] ?? data['tipo_reporte'])),
       _DetailField(label: "Disciplina", value: _formatDisplayValue(data['disciplina'])),
       _DetailField(label: "Categoría", value: _formatDisplayValue(data['categoria'])),
@@ -243,26 +255,6 @@ class DetalleReporteScreen extends StatelessWidget {
         children: visibleFields.map((field) => _InfoPill(label: field.label, value: field.value!)).toList(),
       ),
     );
-  }
-
-  String _resolveResponsableName(Map<String, dynamic> data) {
-    final String? responsableNombre = data['responsableNombre']?.toString().trim();
-    if (responsableNombre != null && responsableNombre.isNotEmpty) {
-      return responsableNombre;
-    }
-    final String? responsable = data['responsable']?.toString().trim();
-    if (responsable != null && responsable.isNotEmpty) {
-      if (responsable.contains('@')) {
-        final namePart = responsable.split('@').first.replaceAll('.', ' ');
-        return _formatTitleCase(namePart);
-      }
-      return responsable;
-    }
-    final String? encargado = data['encargado']?.toString().trim();
-    if (encargado != null && encargado.isNotEmpty) {
-      return encargado;
-    }
-    return '--';
   }
 
   String _formatNumber(dynamic value) {

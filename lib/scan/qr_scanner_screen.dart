@@ -121,7 +121,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Escanear Equipo'),
-        titleTextStyle: const TextStyle(fontSize: 20),
+        titleTextStyle: Theme.of(context).appBarTheme.titleTextStyle,
         actions: [
           // Botón para el Flash (Corregido para la API moderna)
           IconButton(

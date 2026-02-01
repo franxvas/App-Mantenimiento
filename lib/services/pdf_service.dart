@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:appmantflutter/services/usuarios_cache_service.dart';
 
 class PdfService {
   
@@ -71,6 +72,7 @@ class PdfService {
     required Map<String, dynamic> reporte,
     required String reportId,
   }) async {
+    await UsuariosCacheService.instance.preload();
     final fontRegular = await PdfGoogleFonts.notoSansRegular();
     final fontBold = await PdfGoogleFonts.notoSansBold();
     final pdf = pw.Document(
@@ -88,7 +90,7 @@ class PdfService {
             ?.toString() ??
         'N/A';
     final Map<String, dynamic> ubicacion = reporte['ubicacion'] ?? {};
-    final String responsable = _resolveResponsableName(reporte);
+    final String responsable = UsuariosCacheService.instance.resolveResponsableName(reporte);
     final String tipoReporte = reporte['tipoReporte'] ?? reporte['tipo_reporte'] ?? 'General';
     final String tipoReporteLabel = _formatTitleCase(tipoReporte);
     final String estadoFinalLabel = _formatTitleCase(estadoNuevo);
@@ -490,26 +492,6 @@ class PdfService {
 
   static String _normalizeKey(dynamic value) {
     return value.toString().toLowerCase().replaceAll('_', ' ').trim();
-  }
-
-  static String _resolveResponsableName(Map<String, dynamic> reporte) {
-    final String? responsableNombre = reporte['responsableNombre']?.toString().trim();
-    if (responsableNombre != null && responsableNombre.isNotEmpty) {
-      return responsableNombre;
-    }
-    final String? responsable = reporte['responsable']?.toString().trim();
-    if (responsable != null && responsable.isNotEmpty) {
-      if (responsable.contains('@')) {
-        final namePart = responsable.split('@').first.replaceAll('.', ' ');
-        return _formatTitleCase(namePart);
-      }
-      return responsable;
-    }
-    final String? encargado = reporte['encargado']?.toString().trim();
-    if (encargado != null && encargado.isNotEmpty) {
-      return encargado;
-    }
-    return 'N/A';
   }
 
   static pw.Widget _infoRow(String label, String? value) {
