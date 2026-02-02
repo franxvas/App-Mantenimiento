@@ -42,12 +42,21 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final _costoMantenimientoController = TextEditingController();
   final _costoReemplazoController = TextEditingController();
   final _vidaUtilEsperadaController = TextEditingController();
+  final _tipoMobiliarioController = TextEditingController();
+  final _materialPrincipalController = TextEditingController();
+  final _usoIntensivoController = TextEditingController();
+  final _movilidadController = TextEditingController();
+  final _fabricanteController = TextEditingController();
+  final _modeloController = TextEditingController();
+  final _proveedorController = TextEditingController();
+  final _observacionesController = TextEditingController();
   final Map<String, TextEditingController> _dynamicControllers = {};
 
   String _estado = 'operativo';
   static const List<String> _estadoOptions = ['operativo', 'defectuoso', 'fuera_servicio'];
   
   DateTime? _fechaInstalacion;
+  DateTime? _fechaAdquisicion;
   late final String _disciplinaKey;
 
   File? _imageFile;
@@ -92,6 +101,15 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _costoReemplazoController.text = widget.initialData['costoReemplazo']?.toString() ?? '';
     _vidaUtilEsperadaController.text = widget.initialData['vidaUtilEsperadaAnios']?.toString() ?? '';
     _fechaInstalacion = _resolveDate(widget.initialData['fechaInstalacion']);
+    _tipoMobiliarioController.text = widget.initialData['tipoMobiliario']?.toString() ?? '';
+    _materialPrincipalController.text = widget.initialData['materialPrincipal']?.toString() ?? '';
+    _usoIntensivoController.text = widget.initialData['usoIntensivo']?.toString() ?? '';
+    _movilidadController.text = widget.initialData['movilidad']?.toString() ?? '';
+    _fabricanteController.text = widget.initialData['fabricante']?.toString() ?? '';
+    _modeloController.text = widget.initialData['modelo']?.toString() ?? '';
+    _proveedorController.text = widget.initialData['proveedor']?.toString() ?? '';
+    _observacionesController.text = widget.initialData['observaciones']?.toString() ?? '';
+    _fechaAdquisicion = _resolveDate(widget.initialData['fechaAdquisicion']);
     _updateIdActivoPreview();
   }
 
@@ -109,6 +127,14 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _costoMantenimientoController.dispose();
     _costoReemplazoController.dispose();
     _vidaUtilEsperadaController.dispose();
+    _tipoMobiliarioController.dispose();
+    _materialPrincipalController.dispose();
+    _usoIntensivoController.dispose();
+    _movilidadController.dispose();
+    _fabricanteController.dispose();
+    _modeloController.dispose();
+    _proveedorController.dispose();
+    _observacionesController.dispose();
     for (final controller in _dynamicControllers.values) {
       controller.dispose();
     }
@@ -218,6 +244,20 @@ Future<String?> _uploadToSupabase() async {
       },
       'updatedAt': FieldValue.serverTimestamp(),
     };
+
+    if (_isMobiliarios) {
+      productData.addAll({
+        'tipoMobiliario': _tipoMobiliarioController.text.trim(),
+        'materialPrincipal': _materialPrincipalController.text.trim(),
+        'usoIntensivo': _usoIntensivoController.text.trim(),
+        'movilidad': _movilidadController.text.trim(),
+        'fabricante': _fabricanteController.text.trim(),
+        'modelo': _modeloController.text.trim(),
+        'fechaAdquisicion': _fechaAdquisicion,
+        'proveedor': _proveedorController.text.trim(),
+        'observaciones': _observacionesController.text.trim(),
+      });
+    }
     if (newImageUrl != null && newImageUrl.isNotEmpty) {
       productData['imagenUrl'] = newImageUrl;
     }
@@ -389,6 +429,54 @@ Future<String?> _uploadToSupabase() async {
               ),
             ),
 
+            if (_isMobiliarios) ...[
+              const SizedBox(height: 20),
+              const Text("Datos de Mobiliario", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 10),
+              _buildTextField(
+                controller: _tipoMobiliarioController,
+                label: 'Tipo de Mobiliario',
+              ),
+              _buildTextField(
+                controller: _materialPrincipalController,
+                label: 'Material Principal',
+              ),
+              _buildTextField(
+                controller: _usoIntensivoController,
+                label: 'Uso Intensivo',
+              ),
+              _buildTextField(
+                controller: _movilidadController,
+                label: 'Movilidad',
+              ),
+              _buildTextField(
+                controller: _fabricanteController,
+                label: 'Fabricante',
+              ),
+              _buildTextField(
+                controller: _modeloController,
+                label: 'Modelo',
+              ),
+              ListTile(
+                title: const Text("Fecha de Adquisición"),
+                subtitle: Text(_formatDate(_fechaAdquisicion)),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: () => _selectOptionalDate(
+                  initialDate: _fechaAdquisicion,
+                  onSelected: (date) => setState(() => _fechaAdquisicion = date),
+                ),
+              ),
+              _buildTextField(
+                controller: _proveedorController,
+                label: 'Proveedor',
+              ),
+              _buildTextField(
+                controller: _observacionesController,
+                label: 'Observaciones',
+                maxLines: 3,
+              ),
+            ],
+
             const SizedBox(height: 30),
 
             ElevatedButton(
@@ -543,4 +631,6 @@ Future<String?> _uploadToSupabase() async {
     }
     return result;
   }
+
+  bool get _isMobiliarios => _disciplinaKey == 'mobiliarios';
 }
