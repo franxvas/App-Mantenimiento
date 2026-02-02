@@ -32,9 +32,11 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
   final TextEditingController _encargadoCtrl = TextEditingController();
   final TextEditingController _estadoDetectadoCtrl = TextEditingController();
   final TextEditingController _riesgoElectricoCtrl = TextEditingController();
+  final TextEditingController _nivelDesgasteCtrl = TextEditingController();
+  final TextEditingController _riesgoUsuarioCtrl = TextEditingController();
   final TextEditingController _accionRecomendadaCtrl = TextEditingController();
   final TextEditingController _costoEstimadoCtrl = TextEditingController();
-  
+
   String _nuevoEstado = 'OPERATIVO';
   String _condicionFisica = 'buena';
   String? _tipoReporte;
@@ -47,10 +49,13 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
   DateTime _fechaInspeccion = DateTime.now();
   
   bool _isSaving = false; 
+  String _disciplinaKey = '';
 
   @override
   void initState() {
     super.initState();
+    _nuevoEstado = widget.initialStatus.toUpperCase();
+    _loadDisciplina();
     _autoFillEncargado();
   }
 
@@ -61,6 +66,8 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     _encargadoCtrl.dispose();
     _estadoDetectadoCtrl.dispose();
     _riesgoElectricoCtrl.dispose();
+    _nivelDesgasteCtrl.dispose();
+    _riesgoUsuarioCtrl.dispose();
     _accionRecomendadaCtrl.dispose();
     _costoEstimadoCtrl.dispose();
     super.dispose();
@@ -97,6 +104,31 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     return user.displayName ?? user.email ?? _encargadoCtrl.text.trim();
   }
 
+  Future<void> _loadDisciplina() async {
+    final productDoc = await FirebaseFirestore.instance
+        .collection('productos')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+          toFirestore: (data, _) => data,
+        )
+        .doc(widget.productId)
+        .get();
+    if (!productDoc.exists) {
+      return;
+    }
+    final disciplina = productDoc.data()?['disciplina']?.toString().toLowerCase() ?? '';
+    if (mounted) {
+      setState(() {
+        _disciplinaKey = disciplina;
+        if (_isMobiliarios) {
+          _tipoReporte = null;
+          _tipoMantenimiento = null;
+          _requiereReemplazo = false;
+        }
+      });
+    }
+  }
+
   Future<int> _getAndIncrementReportCounter() async {
     final counterRef = FirebaseFirestore.instance
         .collection('metadata')
@@ -129,7 +161,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
     setState(() {
       _isSaving = true;
     });
-    if (_tipoReporte == null) {
+    if (_requiresTipoReporte && _tipoReporte == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Seleccione el tipo de reporte.')),
@@ -164,7 +196,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       final productSnap = await productRef.get();
       final productData = productSnap.data() ?? {};
       final reportRef = productRef.collection('reportes').doc();
-      final reportData = {
+      final reportData = <String, dynamic>{
         'nro': reportNumber,
         'productId': widget.productId,
         'codigoQR': productData['codigoQR'],
@@ -175,29 +207,37 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         'categoria': productData['categoria'] ?? widget.productCategory,
         'fechaInspeccion': fechaInspeccion,
         'estadoDetectado': _estadoDetectadoCtrl.text.trim(),
-        'riesgoElectrico': _riesgoElectricoCtrl.text.trim(),
         'accionRecomendada': _accionRecomendadaCtrl.text.trim(),
         'costoEstimado': costoEstimado,
         'responsable': responsableNombre,
         'responsableNombre': responsableNombre,
         'responsableUid': responsableUid,
         'encargado': responsableNombre,
-        'tipoReporte': _tipoReporte,
-        'descripcion': _descripcionCtrl.text.trim(),
-        'comentarios': _comentariosCtrl.text.trim(),
-        'estadoAnterior': widget.initialStatus.toLowerCase(),
-        'estadoNuevo': _nuevoEstado.toLowerCase(),
-        'estadoOperativo': _nuevoEstado.toLowerCase(),
         'fechaDisplay': DateFormat('dd/MM/yyyy').format(_fechaInspeccion),
         'ubicacion': widget.productLocation,
-        'condicionFisica': _condicionFisica,
-        'tipoMantenimiento': _showTipoMantenimiento ? _tipoMantenimiento : null,
-        'nivelCriticidad': _nivelCriticidad,
-        'impactoFalla': _impactoFalla,
-        'riesgoNormativo': _riesgoNormativo,
-        'requiereReemplazo': _showRequiereReemplazo ? _requiereReemplazo : false,
         'createdAt': FieldValue.serverTimestamp(),
       };
+
+      if (_isMobiliarios) {
+        reportData['nivelDesgaste'] = _nivelDesgasteCtrl.text.trim();
+        reportData['riesgoUsuario'] = _riesgoUsuarioCtrl.text.trim();
+      } else {
+        reportData.addAll({
+          'riesgoElectrico': _riesgoElectricoCtrl.text.trim(),
+          'tipoReporte': _tipoReporte,
+          'descripcion': _descripcionCtrl.text.trim(),
+          'comentarios': _comentariosCtrl.text.trim(),
+          'estadoAnterior': widget.initialStatus.toLowerCase(),
+          'estadoNuevo': _nuevoEstado.toLowerCase(),
+          'estadoOperativo': _nuevoEstado.toLowerCase(),
+          'condicionFisica': _condicionFisica,
+          'tipoMantenimiento': _showTipoMantenimiento ? _tipoMantenimiento : null,
+          'nivelCriticidad': _nivelCriticidad,
+          'impactoFalla': _impactoFalla,
+          'riesgoNormativo': _riesgoNormativo,
+          'requiereReemplazo': _showRequiereReemplazo ? _requiereReemplazo : false,
+        });
+      }
 
       await reportRef.set(reportData);
       await FirebaseFirestore.instance
@@ -209,17 +249,22 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
           frecuencia != null ? addMonthsDouble(_fechaInspeccion, frecuencia) : null;
 
       final updateData = <String, dynamic>{
-        'estado': _nuevoEstado.toLowerCase(),
-        'estadoOperativo': _nuevoEstado.toLowerCase(),
-        'condicionFisica': _condicionFisica,
-        'tipoMantenimiento': _showTipoMantenimiento ? _tipoMantenimiento : null,
-        'nivelCriticidad': _nivelCriticidad,
-        'impactoFalla': _impactoFalla,
-        'riesgoNormativo': _riesgoNormativo,
-        'requiereReemplazo': _showRequiereReemplazo ? _requiereReemplazo : false,
         'fechaUltimaInspeccion': fechaInspeccion,
         'updatedAt': FieldValue.serverTimestamp(),
       };
+
+      if (!_isMobiliarios) {
+        updateData.addAll({
+          'estado': _nuevoEstado.toLowerCase(),
+          'estadoOperativo': _nuevoEstado.toLowerCase(),
+          'condicionFisica': _condicionFisica,
+          'tipoMantenimiento': _showTipoMantenimiento ? _tipoMantenimiento : null,
+          'nivelCriticidad': _nivelCriticidad,
+          'impactoFalla': _impactoFalla,
+          'riesgoNormativo': _riesgoNormativo,
+          'requiereReemplazo': _showRequiereReemplazo ? _requiereReemplazo : false,
+        });
+      }
 
       if (fechaProximo != null) {
         updateData['fechaProximoMantenimiento'] = Timestamp.fromDate(fechaProximo);
@@ -267,7 +312,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
                 style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
             ),
             
-            _buildTipoReporteDropdown(),
+            if (_requiresTipoReporte) _buildTipoReporteDropdown(),
             
             _buildReadOnlyField("Activo*", "${widget.productName}\n${widget.productCategory}"),
             _buildReadOnlyField(
@@ -301,11 +346,24 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               label: "Estado Detectado*",
               hint: "EJ: Operativo con falla",
             ),
-            _buildTextField(
-              controller: _riesgoElectricoCtrl,
-              label: "Riesgo Eléctrico*",
-              hint: "EJ: Alto",
-            ),
+            if (_isMobiliarios)
+              _buildTextField(
+                controller: _nivelDesgasteCtrl,
+                label: "Nivel de Desgaste*",
+                hint: "EJ: Medio",
+              ),
+            if (_isMobiliarios)
+              _buildTextField(
+                controller: _riesgoUsuarioCtrl,
+                label: "Riesgo al Usuario*",
+                hint: "EJ: Bajo",
+              ),
+            if (!_isMobiliarios)
+              _buildTextField(
+                controller: _riesgoElectricoCtrl,
+                label: "Riesgo Eléctrico*",
+                hint: "EJ: Alto",
+              ),
             _buildTextField(
               controller: _accionRecomendadaCtrl,
               label: "Acción Recomendada*",
@@ -317,54 +375,60 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               hint: "EJ: 1500",
               keyboardType: TextInputType.number,
             ),
-            _buildReadOnlyField("Encargado (usuario)", _encargadoCtrl.text),
-            
-            _buildTextField(
-              controller: _descripcionCtrl,
-              label: "Descripción del Reporte*",
-              hint: "Describa el problema o la tarea realizada...",
-              maxLines: 4,
-            ),
-            
-            _buildSegmentedControl(
-              label: "Estado operativo del activo*",
-              options: const ['OPERATIVO', 'DEFECTUOSO', 'FUERA_SERVICIO'],
-              value: _nuevoEstado,
-              onChanged: (newValue) => setState(() => _nuevoEstado = newValue),
-            ),
+            _buildReadOnlyField(_isMobiliarios ? "Responsable" : "Encargado (usuario)", _encargadoCtrl.text),
 
-            _buildDropdownField(
-              label: "Condición Física",
-              value: _condicionFisica,
-              items: const ['buena', 'regular', 'mala'],
-              onChanged: (value) => setState(() => _condicionFisica = value ?? _condicionFisica),
-            ),
-            if (_showTipoMantenimiento)
+            if (!_isMobiliarios)
+              _buildTextField(
+                controller: _descripcionCtrl,
+                label: "Descripción del Reporte*",
+                hint: "Describa el problema o la tarea realizada...",
+                maxLines: 4,
+              ),
+
+            if (!_isMobiliarios)
+              _buildSegmentedControl(
+                label: "Estado operativo del activo*",
+                options: const ['OPERATIVO', 'DEFECTUOSO', 'FUERA_SERVICIO'],
+                value: _nuevoEstado,
+                onChanged: (newValue) => setState(() => _nuevoEstado = newValue),
+              ),
+
+            if (!_isMobiliarios)
+              _buildDropdownField(
+                label: "Condición Física",
+                value: _condicionFisica,
+                items: const ['buena', 'regular', 'mala'],
+                onChanged: (value) => setState(() => _condicionFisica = value ?? _condicionFisica),
+              ),
+            if (!_isMobiliarios && _showTipoMantenimiento)
               _buildSegmentedControl(
                 label: "Tipo de mantenimiento*",
                 options: const ['preventivo', 'correctivo', 'situacional'],
                 value: _tipoMantenimiento ?? 'preventivo',
                 onChanged: (newValue) => setState(() => _tipoMantenimiento = newValue),
               ),
-            _buildDropdownField(
-              label: "Nivel de Criticidad",
-              value: _nivelCriticidad,
-              items: const ['alto', 'medio', 'bajo'],
-              onChanged: (value) => setState(() => _nivelCriticidad = value ?? _nivelCriticidad),
-            ),
-            _buildDropdownField(
-              label: "Impacto de Falla",
-              value: _impactoFalla,
-              items: const ['seguridad', 'operacion', 'confort'],
-              onChanged: (value) => setState(() => _impactoFalla = value ?? _impactoFalla),
-            ),
-            _buildDropdownField(
-              label: "Riesgo Normativo",
-              value: _riesgoNormativo,
-              items: const ['cumple', 'no_cumple', 'evaluar'],
-              onChanged: (value) => setState(() => _riesgoNormativo = value ?? _riesgoNormativo),
-            ),
-            if (_showRequiereReemplazo)
+            if (!_isMobiliarios)
+              _buildDropdownField(
+                label: "Nivel de Criticidad",
+                value: _nivelCriticidad,
+                items: const ['alto', 'medio', 'bajo'],
+                onChanged: (value) => setState(() => _nivelCriticidad = value ?? _nivelCriticidad),
+              ),
+            if (!_isMobiliarios)
+              _buildDropdownField(
+                label: "Impacto de Falla",
+                value: _impactoFalla,
+                items: const ['seguridad', 'operacion', 'confort'],
+                onChanged: (value) => setState(() => _impactoFalla = value ?? _impactoFalla),
+              ),
+            if (!_isMobiliarios)
+              _buildDropdownField(
+                label: "Riesgo Normativo",
+                value: _riesgoNormativo,
+                items: const ['cumple', 'no_cumple', 'evaluar'],
+                onChanged: (value) => setState(() => _riesgoNormativo = value ?? _riesgoNormativo),
+              ),
+            if (!_isMobiliarios && _showRequiereReemplazo)
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text("Requiere Reemplazo"),
@@ -372,13 +436,14 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
                 onChanged: _isSaving ? null : (value) => setState(() => _requiereReemplazo = value),
               ),
 
-            _buildTextField(
-              controller: _comentariosCtrl,
-              label: "Acciones Tomadas / Comentarios",
-              hint: "Añada comentarios sobre las acciones tomadas o la solución...",
-              maxLines: 3,
-              isRequired: false,
-            ),
+            if (!_isMobiliarios)
+              _buildTextField(
+                controller: _comentariosCtrl,
+                label: "Acciones Tomadas / Comentarios",
+                hint: "Añada comentarios sobre las acciones tomadas o la solución...",
+                maxLines: 3,
+                isRequired: false,
+              ),
             
             const SizedBox(height: 30),
             
@@ -625,10 +690,15 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         .join(' ');
   }
 
-  bool get _showTipoMantenimiento => _tipoReporte == 'mantenimiento';
+  bool get _showTipoMantenimiento => !_isMobiliarios && _tipoReporte == 'mantenimiento';
 
   bool get _showRequiereReemplazo =>
-      _tipoReporte == 'mantenimiento' ||
-      _tipoReporte == 'inspeccion' ||
-      _tipoReporte == 'incidente_falla';
+      !_isMobiliarios &&
+      (_tipoReporte == 'mantenimiento' ||
+          _tipoReporte == 'inspeccion' ||
+          _tipoReporte == 'incidente_falla');
+
+  bool get _requiresTipoReporte => !_isMobiliarios;
+
+  bool get _isMobiliarios => _disciplinaKey == 'mobiliarios';
 }

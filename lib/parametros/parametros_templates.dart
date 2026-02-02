@@ -173,12 +173,16 @@ const Map<String, Map<String, List<String>>> parametrosHeaders = {
       'Condicion_Fisica',
       'Fecha_Ultima_Inspeccion',
       'Nivel_Criticidad',
-      'Impacto_Falla',
-      'Riesgo_Normativo',
-      'Frecuencia_Mantenimiento_Meses',
-      'Fecha_Proximo_Mantenimiento',
-      'Costo_Mantenimiento',
+      'Tipo_Mobiliario',
+      'Material_Principal',
+      'Uso_Intensivo',
+      'Movilidad',
+      'Fabricante',
+      'Modelo',
+      'Fecha_Adquisicion',
+      'Vida_Util_Esperada_Anios',
       'Costo_Reemplazo',
+      'Proveedor',
       'Observaciones',
     ],
     'reportes': [
@@ -187,6 +191,8 @@ const Map<String, Map<String, List<String>>> parametrosHeaders = {
       'Disciplina',
       'Fecha_Inspeccion',
       'Estado_Detectado',
+      'Nivel_Desgaste',
+      'Riesgo_Usuario',
       'Accion_Recomendada',
       'Costo_Estimado',
       'Responsable',
@@ -256,6 +262,22 @@ dynamic valueForHeader(
       return _formatDate(productData['fechaInstalacion']);
     case 'Vida_Util_Esperada_Anios':
       return _formatNumber(productData['vidaUtilEsperadaAnios']);
+    case 'Tipo_Mobiliario':
+      return productData['tipoMobiliario'] ?? '';
+    case 'Material_Principal':
+      return productData['materialPrincipal'] ?? '';
+    case 'Uso_Intensivo':
+      return productData['usoIntensivo'] ?? '';
+    case 'Movilidad':
+      return productData['movilidad'] ?? '';
+    case 'Fabricante':
+      return productData['fabricante'] ?? '';
+    case 'Modelo':
+      return productData['modelo'] ?? '';
+    case 'Fecha_Adquisicion':
+      return _formatDate(productData['fechaAdquisicion']);
+    case 'Proveedor':
+      return productData['proveedor'] ?? '';
     case 'Requiere_Reemplazo':
       return _formatBool(productData['requiereReemplazo']);
     case 'ID_Reporte':
@@ -277,6 +299,10 @@ dynamic valueForHeader(
       return reportData['riesgoElectrico'] ?? '';
     case 'Riesgo_Sanitario':
       return reportData['riesgoSanitario'] ?? '';
+    case 'Nivel_Desgaste':
+      return reportData['nivelDesgaste'] ?? '';
+    case 'Riesgo_Usuario':
+      return reportData['riesgoUsuario'] ?? '';
     default:
       return '';
   }

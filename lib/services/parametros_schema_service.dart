@@ -87,6 +87,9 @@ class ParametrosSchemaService {
       if (!schemaSnap.exists) {
         batch.set(schemaRef, definition.toMap());
         hasChanges = true;
+      } else if (definition.disciplinaKey == 'mobiliarios') {
+        batch.set(schemaRef, definition.toMap(), SetOptions(merge: true));
+        hasChanges = true;
       }
 
       final datasetRef = datasetsRef.doc(definition.id);
@@ -260,6 +263,142 @@ class ParametrosSchemaService {
       ),
     ];
 
+    const mobiliariosBaseColumns = [
+      ParametrosSchemaColumn(
+        key: 'idActivo',
+        displayName: 'ID_Activo',
+        order: 0,
+        type: 'text',
+        required: true,
+      ),
+      ParametrosSchemaColumn(
+        key: 'disciplina',
+        displayName: 'Disciplina',
+        order: 1,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'categoriaActivo',
+        displayName: 'Categoria_Activo',
+        order: 2,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'tipoActivo',
+        displayName: 'Tipo_Activo',
+        order: 3,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'bloque',
+        displayName: 'Bloque',
+        order: 4,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'nivel',
+        displayName: 'Nivel',
+        order: 5,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'espacio',
+        displayName: 'Espacio',
+        order: 6,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'estadoOperativo',
+        displayName: 'Estado_Operativo',
+        order: 7,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'condicionFisica',
+        displayName: 'Condicion_Fisica',
+        order: 8,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'fechaUltimaInspeccion',
+        displayName: 'Fecha_Ultima_Inspeccion',
+        order: 9,
+        type: 'date',
+      ),
+      ParametrosSchemaColumn(
+        key: 'nivelCriticidad',
+        displayName: 'Nivel_Criticidad',
+        order: 10,
+        type: 'number',
+      ),
+      ParametrosSchemaColumn(
+        key: 'tipoMobiliario',
+        displayName: 'Tipo_Mobiliario',
+        order: 11,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'materialPrincipal',
+        displayName: 'Material_Principal',
+        order: 12,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'usoIntensivo',
+        displayName: 'Uso_Intensivo',
+        order: 13,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'movilidad',
+        displayName: 'Movilidad',
+        order: 14,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'fabricante',
+        displayName: 'Fabricante',
+        order: 15,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'modelo',
+        displayName: 'Modelo',
+        order: 16,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'fechaAdquisicion',
+        displayName: 'Fecha_Adquisicion',
+        order: 17,
+        type: 'date',
+      ),
+      ParametrosSchemaColumn(
+        key: 'vidaUtilEsperadaAnios',
+        displayName: 'Vida_Util_Esperada_Anios',
+        order: 18,
+        type: 'number',
+      ),
+      ParametrosSchemaColumn(
+        key: 'costoReemplazo',
+        displayName: 'Costo_Reemplazo',
+        order: 19,
+        type: 'number',
+      ),
+      ParametrosSchemaColumn(
+        key: 'proveedor',
+        displayName: 'Proveedor',
+        order: 20,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'observaciones',
+        displayName: 'Observaciones',
+        order: 21,
+        type: 'text',
+      ),
+    ];
+
     const reportesColumns = [
       ParametrosSchemaColumn(
         key: 'idReporte',
@@ -317,6 +456,69 @@ class ParametrosSchemaService {
       ),
     ];
 
+    const mobiliariosReportesColumns = [
+      ParametrosSchemaColumn(
+        key: 'idReporte',
+        displayName: 'ID_Reporte',
+        order: 0,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'idActivo',
+        displayName: 'ID_Activo',
+        order: 1,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'disciplina',
+        displayName: 'Disciplina',
+        order: 2,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'fechaInspeccion',
+        displayName: 'Fecha_Inspeccion',
+        order: 3,
+        type: 'date',
+      ),
+      ParametrosSchemaColumn(
+        key: 'estadoDetectado',
+        displayName: 'Estado_Detectado',
+        order: 4,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'nivelDesgaste',
+        displayName: 'Nivel_Desgaste',
+        order: 5,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'riesgoUsuario',
+        displayName: 'Riesgo_Usuario',
+        order: 6,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'accionRecomendada',
+        displayName: 'Accion_Recomendada',
+        order: 7,
+        type: 'text',
+      ),
+      ParametrosSchemaColumn(
+        key: 'costoEstimado',
+        displayName: 'Costo_Estimado',
+        order: 8,
+        type: 'number',
+      ),
+      ParametrosSchemaColumn(
+        key: 'responsable',
+        displayName: 'Responsable',
+        order: 9,
+        type: 'text',
+      ),
+    ];
+
     const disciplinas = [
       'electricas',
       'arquitectura',
@@ -328,22 +530,25 @@ class ParametrosSchemaService {
 
     return disciplinas
         .expand(
-          (disciplina) => [
-            ParametrosSchemaDefinition(
-              disciplinaKey: disciplina,
-              disciplinaLabel: _labelFor(disciplina),
-              tipo: 'base',
-              filenameDefault: _filenameFor(disciplina, 'base'),
-              columns: baseColumns,
-            ),
-            ParametrosSchemaDefinition(
-              disciplinaKey: disciplina,
-              disciplinaLabel: _labelFor(disciplina),
-              tipo: 'reportes',
-              filenameDefault: _filenameFor(disciplina, 'reportes'),
-              columns: reportesColumns,
-            ),
-          ],
+          (disciplina) {
+            final isMobiliarios = disciplina == 'mobiliarios';
+            return [
+              ParametrosSchemaDefinition(
+                disciplinaKey: disciplina,
+                disciplinaLabel: _labelFor(disciplina),
+                tipo: 'base',
+                filenameDefault: _filenameFor(disciplina, 'base'),
+                columns: isMobiliarios ? mobiliariosBaseColumns : baseColumns,
+              ),
+              ParametrosSchemaDefinition(
+                disciplinaKey: disciplina,
+                disciplinaLabel: _labelFor(disciplina),
+                tipo: 'reportes',
+                filenameDefault: _filenameFor(disciplina, 'reportes'),
+                columns: isMobiliarios ? mobiliariosReportesColumns : reportesColumns,
+              ),
+            ];
+          },
         )
         .toList();
   }

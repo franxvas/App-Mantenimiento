@@ -8,6 +8,7 @@ import 'package:appmantflutter/services/parametros_dataset_service.dart';
 import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
 import 'package:appmantflutter/services/activo_id_helper.dart';
+import 'package:appmantflutter/shared/disciplinas_categorias.dart';
 
 class AgregarProductoScreen extends StatefulWidget {
   const AgregarProductoScreen({super.key});
@@ -36,10 +37,18 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   final _frecuenciaMantenimientoCtrl = TextEditingController();
   final _costoReemplazoCtrl = TextEditingController();
   final _vidaUtilEsperadaCtrl = TextEditingController();
+  final _tipoMobiliarioCtrl = TextEditingController();
+  final _materialPrincipalCtrl = TextEditingController();
+  final _usoIntensivoCtrl = TextEditingController();
+  final _movilidadCtrl = TextEditingController();
+  final _fabricanteCtrl = TextEditingController();
+  final _modeloCtrl = TextEditingController();
+  final _proveedorCtrl = TextEditingController();
+  final _observacionesCtrl = TextEditingController();
 
   final Map<String, TextEditingController> _dynamicControllers = {};
 
-  String _categoria = 'luminarias';
+  String? _categoria;
   String _disciplina = 'Electricas';
   String _subcategoria = 'luces_emergencia';
   String _estado = 'operativo';
@@ -52,6 +61,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   
   DateTime _fechaInstalacion = DateTime.now();
   bool _fechaInstalacionCustom = false;
+  DateTime? _fechaAdquisicion;
+  bool _fechaAdquisicionCustom = false;
   File? _imageFile;
 
   @override
@@ -67,6 +78,14 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     _frecuenciaMantenimientoCtrl.dispose();
     _costoReemplazoCtrl.dispose();
     _vidaUtilEsperadaCtrl.dispose();
+    _tipoMobiliarioCtrl.dispose();
+    _materialPrincipalCtrl.dispose();
+    _usoIntensivoCtrl.dispose();
+    _movilidadCtrl.dispose();
+    _fabricanteCtrl.dispose();
+    _modeloCtrl.dispose();
+    _proveedorCtrl.dispose();
+    _observacionesCtrl.dispose();
     for (final controller in _dynamicControllers.values) {
       controller.dispose();
     }
@@ -78,6 +97,10 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     super.initState();
     _parametrosSchemaService.seedSchemasIfMissing();
     _updateIdActivoPreview();
+    final categorias = _categoriasForDisciplina(_disciplina);
+    if (categorias.isNotEmpty) {
+      _categoria = categorias.first.value;
+    }
   }
 
   Future<void> _pickImage() async {
@@ -107,6 +130,12 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
   Future<void> _guardarProducto() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_isCategoriaValida()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleccione una categoría válida para la disciplina.')),
+      );
+      return;
+    }
     setState(() => _isUploading = true);
 
     try {
@@ -151,6 +180,17 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'costoMantenimiento': 0.0,
         'costoReemplazo': _parseDouble(_costoReemplazoCtrl.text),
         'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaCtrl.text),
+        'tipoMobiliario': _isMobiliarios ? _tipoMobiliarioCtrl.text.trim() : null,
+        'materialPrincipal': _isMobiliarios ? _materialPrincipalCtrl.text.trim() : null,
+        'usoIntensivo': _isMobiliarios ? _usoIntensivoCtrl.text.trim() : null,
+        'movilidad': _isMobiliarios ? _movilidadCtrl.text.trim() : null,
+        'fabricante': _isMobiliarios ? _fabricanteCtrl.text.trim() : null,
+        'modelo': _isMobiliarios ? _modeloCtrl.text.trim() : null,
+        'fechaAdquisicion': _isMobiliarios && _fechaAdquisicionCustom && _fechaAdquisicion != null
+            ? Timestamp.fromDate(_fechaAdquisicion!)
+            : null,
+        'proveedor': _isMobiliarios ? _proveedorCtrl.text.trim() : null,
+        'observaciones': _isMobiliarios ? _observacionesCtrl.text.trim() : null,
         ...topLevelValues,
         'marca': _marcaCtrl.text.trim(),
         'serie': _serieCtrl.text.trim(),
@@ -199,9 +239,10 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final categorias = _categoriasForDisciplina(_disciplina);
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Agregar Producto"),
+        title: const Text("Agregar Activo"),
         titleTextStyle: Theme.of(context).appBarTheme.titleTextStyle,
       ),
       body: _isUploading 
@@ -241,16 +282,34 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                 _disciplina,
                 ['Electricas', 'Sanitarias', 'Estructuras', 'Arquitectura', 'Mecanica', 'Mobiliarios'],
                 (v) {
-                  _disciplina = v!;
-                  _updateIdActivoPreview();
+                  setState(() {
+                    _disciplina = v!;
+                    final nextCategorias = _categoriasForDisciplina(_disciplina);
+                    if (_categoria == null || !nextCategorias.any((item) => item.value == _categoria)) {
+                      _categoria = null;
+                    }
+                    if (!_isMobiliarios) {
+                      _resetMobiliariosFields();
+                    }
+                    _updateIdActivoPreview();
+                  });
                 },
               ),
               _buildDropdown(
                 "Categoría",
                 _categoria,
-                ['luminarias', 'tableros', 'bombas', 'sillas', 'mesas', 'estantes', 'otros'],
-                (v) => setState(() => _categoria = v!),
+                categorias.map((item) => item.value).toList(),
+                (v) => setState(() => _categoria = v),
+                hintText: categorias.isEmpty ? 'Sin categorías disponibles' : 'Seleccione una categoría',
               ),
+              if (categorias.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'No hay categorías disponibles para esta disciplina.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
               _buildTextField(
                 null,
                 "Subcategoría (Escribir manual)",
@@ -295,6 +354,34 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
               _buildTextField(_frecuenciaMantenimientoCtrl, "Frecuencia Mantenimiento (meses)", keyboardType: TextInputType.number),
               _buildTextField(_costoReemplazoCtrl, "Costo Reemplazo", keyboardType: TextInputType.number),
               _buildTextField(_vidaUtilEsperadaCtrl, "Vida Útil Esperada (Años)", keyboardType: TextInputType.number),
+
+              if (_isMobiliarios) ...[
+                const SizedBox(height: 20),
+                const Text("Datos de Mobiliario", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const SizedBox(height: 10),
+                _buildTextField(_tipoMobiliarioCtrl, "Tipo de Mobiliario"),
+                _buildTextField(_materialPrincipalCtrl, "Material Principal"),
+                _buildTextField(_usoIntensivoCtrl, "Uso Intensivo"),
+                _buildTextField(_movilidadCtrl, "Movilidad"),
+                _buildTextField(_fabricanteCtrl, "Fabricante"),
+                _buildTextField(_modeloCtrl, "Modelo"),
+                ListTile(
+                  title: const Text("Fecha de Adquisición"),
+                  subtitle: Text(_fechaAdquisicion == null
+                      ? '--/--/----'
+                      : DateFormat('dd/MM/yyyy').format(_fechaAdquisicion!)),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () => _selectOptionalDate(
+                    initialDate: _fechaAdquisicion ?? DateTime.now(),
+                    onSelected: (date) => setState(() {
+                      _fechaAdquisicion = date;
+                      _fechaAdquisicionCustom = true;
+                    }),
+                  ),
+                ),
+                _buildTextField(_proveedorCtrl, "Proveedor"),
+                _buildTextField(_observacionesCtrl, "Observaciones", maxLines: 3),
+              ],
 
               const SizedBox(height: 20),
               ListTile(
@@ -368,16 +455,59 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     );
   }
 
-  Widget _buildDropdown(String label, String value, List<String> items, Function(String?) onChanged) {
+  Widget _buildDropdown(
+    String label,
+    String? value,
+    List<String> items,
+    Function(String?) onChanged, {
+    String? hintText,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
-        value: items.contains(value) ? value : items.first,
+        value: value != null && items.contains(value) ? value : null,
         decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
         items: items.map((e) => DropdownMenuItem(value: e, child: Text(_formatLabel(e)))).toList(),
+        hint: hintText != null ? Text(hintText) : null,
         onChanged: onChanged,
+        validator: (val) {
+          if (val == null || val.isEmpty) {
+            return 'Campo requerido';
+          }
+          if (items.isNotEmpty && !items.contains(val)) {
+            return 'Categoría inválida';
+          }
+          return null;
+        },
       ),
     );
+  }
+
+  List<CategoriaDisciplina> _categoriasForDisciplina(String disciplina) {
+    return categoriasPorDisciplina(disciplina.toLowerCase());
+  }
+
+  bool get _isMobiliarios => _disciplina.toLowerCase() == 'mobiliarios';
+
+  bool _isCategoriaValida() {
+    final categorias = _categoriasForDisciplina(_disciplina);
+    if (categorias.isEmpty) {
+      return false;
+    }
+    return _categoria != null && categorias.any((item) => item.value == _categoria);
+  }
+
+  void _resetMobiliariosFields() {
+    _tipoMobiliarioCtrl.clear();
+    _materialPrincipalCtrl.clear();
+    _usoIntensivoCtrl.clear();
+    _movilidadCtrl.clear();
+    _fabricanteCtrl.clear();
+    _modeloCtrl.clear();
+    _proveedorCtrl.clear();
+    _observacionesCtrl.clear();
+    _fechaAdquisicion = null;
+    _fechaAdquisicionCustom = false;
   }
 
   List<Widget> _buildDynamicFields(List<SchemaField> fields) {
@@ -413,6 +543,14 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       'riesgoNormativo',
       'fechaInstalacion',
       'vidaUtilEsperadaAnios',
+      'tipoMobiliario',
+      'materialPrincipal',
+      'usoIntensivo',
+      'movilidad',
+      'fabricante',
+      'modelo',
+      'fechaAdquisicion',
+      'proveedor',
       'updatedAt',
       'imagenUrl',
     };

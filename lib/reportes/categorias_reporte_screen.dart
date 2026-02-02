@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:appmantflutter/reportes/lista_reportes_por_categoria_screen.dart';
 import 'package:appmantflutter/shared/disciplinas_config.dart';
+import 'package:appmantflutter/shared/disciplinas_categorias.dart';
 
 class CategoriasReporteScreen extends StatelessWidget {
   final String disciplinaId;
@@ -14,7 +15,7 @@ class CategoriasReporteScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> categorias = _getCategorias(disciplinaId);
+    final categorias = categoriasPorDisciplina(disciplinaId);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
@@ -46,16 +47,16 @@ class CategoriasReporteScreen extends StatelessWidget {
               itemBuilder: (context, index) {
                 final item = categorias[index];
                 return _CategoriaCard(
-                  nombre: item['display_name'],
-                  icon: item['icon'],
+                  nombre: item.label,
+                  icon: item.icon,
                   color: primaryRed,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => ListaReportesPorCategoriaScreen(
-                          categoriaFilter: item['filter_value'],
-                          categoriaTitle: item['display_name'],
+                          categoriaFilter: item.value,
+                          categoriaTitle: item.label,
                         ),
                       ),
                     );
@@ -67,42 +68,6 @@ class CategoriasReporteScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  List<Map<String, dynamic>> _getCategorias(String id) {
-    switch (id) {
-      case 'electricas':
-        return [
-          {'display_name': 'Luminarias', 'filter_value': 'luminarias', 'icon': Icons.lightbulb},
-          {'display_name': 'Aparatos Eléctricos', 'filter_value': 'aparatos eléctricos', 'icon': Icons.smart_toy},
-          {'display_name': 'Tableros Eléctricos', 'filter_value': 'tableros eléctricos', 'icon': Icons.flash_on},
-        ];
-      case 'arquitectura':
-        return [
-          {'display_name': 'Acabados', 'filter_value': 'acabados', 'icon': Icons.format_paint},
-          {'display_name': 'Carpintería', 'filter_value': 'carpintería', 'icon': Icons.door_front_door},
-        ];
-      case 'estructuras':
-        return [
-          {'display_name': 'Vigas y Columnas', 'filter_value': 'vigas y columnas', 'icon': Icons.view_column},
-        ];
-      case 'mecanica':
-        return [
-          {'display_name': 'Bombas de Agua', 'filter_value': 'bombas de agua', 'icon': Icons.cyclone},
-        ];
-      case 'sanitarias':
-        return [
-          {'display_name': 'Griferías', 'filter_value': 'griferías', 'icon': Icons.water_drop},
-        ];
-      case 'mobiliarios':
-        return [
-          {'display_name': 'Sillas', 'filter_value': 'sillas', 'icon': Icons.chair},
-          {'display_name': 'Mesas', 'filter_value': 'mesas', 'icon': Icons.table_restaurant},
-          {'display_name': 'Estantes', 'filter_value': 'estantes', 'icon': Icons.inventory_2},
-        ];
-      default:
-        return [];
-    }
   }
 }
 
