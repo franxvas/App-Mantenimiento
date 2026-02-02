@@ -314,7 +314,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             
             if (_requiresTipoReporte) _buildTipoReporteDropdown(),
             
-            _buildReadOnlyField("Activo*", "${widget.productName}\n${widget.productCategory}"),
+            _buildReadOnlyField("Activo*", "${widget.productName}"),
             _buildReadOnlyField(
               "Ubicación",
               "Bloque: ${widget.productLocation['bloque'] ?? '--'} - Nivel: ${widget.productLocation['nivel'] ?? widget.productLocation['piso'] ?? '--'}",
