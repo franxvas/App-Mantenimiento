@@ -2,6 +2,25 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:appmantflutter/shared/disciplinas_categorias.dart';
 
+// Flutter necesita IconData const para permitir tree shaking de fuentes.
+const Map<int, IconData> _materialIconsByCodePoint = {
+  0xe0f0: Icons.lightbulb,
+  0xf06b: Icons.smart_toy,
+  0xe8b8: Icons.flash_on,
+  0xe7ab: Icons.format_paint,
+  0xf1bb: Icons.door_front_door,
+  0xe8f1: Icons.view_column,
+  0xe5d4: Icons.cyclone,
+  0xe798: Icons.water_drop,
+  0xe9b1: Icons.chair,
+  0xf1b0: Icons.table_restaurant,
+  0xe6b4: Icons.inventory_2,
+  0xe869: Icons.build,
+  0xe902: Icons.construction,
+  0xe1db: Icons.storage,
+  0xe1bd: Icons.widgets,
+};
+
 class CategoriaItem {
   final String id;
   final String disciplina;
@@ -21,9 +40,8 @@ class CategoriaItem {
     final data = doc.data() ?? <String, dynamic>{};
     final iconCodePoint = data['iconCodePoint'] as int?;
     final iconFontFamily = data['iconFontFamily']?.toString() ?? 'MaterialIcons';
-    final iconFontPackage = data['iconFontPackage']?.toString();
-    final iconData = iconCodePoint != null
-        ? IconData(iconCodePoint, fontFamily: iconFontFamily, fontPackage: iconFontPackage)
+    final iconData = iconCodePoint != null && iconFontFamily == 'MaterialIcons'
+        ? (_materialIconsByCodePoint[iconCodePoint] ?? Icons.category)
         : Icons.category;
     return CategoriaItem(
       id: doc.id,
