@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:appmantflutter/productos/lista_productos_screen.dart';
 import 'package:appmantflutter/shared/disciplinas_config.dart';
+import 'package:appmantflutter/disciplinas/categorias_disciplina_screen.dart';
 
 class DisciplinaData {
   final String id;
@@ -80,10 +80,9 @@ class _DisciplinaCard extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ListaProductosScreen(
-                filterBy: 'disciplina',
-                filterValue: item.id,
-                title: item.nombre,
+              builder: (context) => CategoriasDisciplinaScreen(
+                disciplinaId: item.id,
+                disciplinaNombre: item.nombre,
               ),
             ),
           );

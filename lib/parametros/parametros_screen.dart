@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/parametros_schema_service.dart';
+import 'parametros_import_screen.dart';
 import 'parametros_viewer_screen.dart';
 
 typedef DisciplinaOption = ({
@@ -51,6 +52,7 @@ class _ParametrosScreenState extends State<ParametrosScreen> {
             return _ParametrosDisciplinaCard(
               option: option,
               onOpenViewer: (tipo) => _openViewer(context, option, tipo),
+              onOpenImport: () => _openImport(context, option),
             );
           },
         ),
@@ -70,15 +72,29 @@ class _ParametrosScreenState extends State<ParametrosScreen> {
       ),
     );
   }
+
+  void _openImport(BuildContext context, DisciplinaOption option) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ParametrosImportScreen(
+          disciplinaKey: option.key,
+          disciplinaLabel: option.label,
+        ),
+      ),
+    );
+  }
 }
 
 class _ParametrosDisciplinaCard extends StatelessWidget {
   final DisciplinaOption option;
   final void Function(String tipo) onOpenViewer;
+  final VoidCallback onOpenImport;
 
   const _ParametrosDisciplinaCard({
     required this.option,
     required this.onOpenViewer,
+    required this.onOpenImport,
   });
 
   @override
@@ -115,6 +131,18 @@ class _ParametrosDisciplinaCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onOpenImport,
+                icon: const Icon(Icons.upload_file),
+                label: const Text('Importar Base (Excel)'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
             ),
           ],
         ),

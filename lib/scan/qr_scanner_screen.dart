@@ -101,18 +101,22 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('❌ Producto no encontrado en la base de datos.'),
+              content: Text('Producto no encontrado en la base de datos.'),
               backgroundColor: Colors.red,
             ),
           );
           // Pausamos un momento y permitimos escanear de nuevo
           await Future.delayed(const Duration(seconds: 2));
-          setState(() => _isProcessing = false);
+          if (mounted) {
+            setState(() => _isProcessing = false);
+          }
         }
       }
     } catch (e) {
       print("Error al buscar QR: $e");
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 

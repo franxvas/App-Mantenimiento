@@ -10,6 +10,8 @@ import 'package:appmantflutter/productos/editar_producto_screen.dart';
 import 'package:appmantflutter/services/pdf_service.dart'; 
 import 'package:appmantflutter/productos/reportes_del_producto_screen.dart';
 import 'package:appmantflutter/reportes/detalle_reporte_screen.dart';
+import 'package:appmantflutter/services/categorias_service.dart';
+import 'package:appmantflutter/shared/text_formatters.dart';
 
 class DetalleProductoScreen extends StatelessWidget {
   final String productId;
@@ -117,6 +119,7 @@ class DetalleProductoScreen extends StatelessWidget {
           final data = snapshot.data!.data() ?? <String, dynamic>{};
           final String productName = data['nombre'] ?? 'N/A';
           final String productCategory = data['categoria'] ?? 'N/A';
+          final String disciplinaKey = (data['disciplina'] ?? '').toString().toLowerCase();
           final Map<String, dynamic> ubicacion = data['ubicacion'] ?? {};
           final Map<String, dynamic> attrs = data['attrs'] ?? {};
           final String imageUrl = data['imagenUrl'] ?? ''; 
@@ -146,11 +149,30 @@ class DetalleProductoScreen extends StatelessWidget {
                   title: "Detalles del Equipo",
                   content: Column(
                     children: [
-                      _DetailRow(icon: FontAwesomeIcons.barcode, label: "Serie", value: data['serie'] ?? attrs['serie'] ?? '--'),
-                      _DetailRow(icon: FontAwesomeIcons.tag, label: "Marca", value: data['marca'] ?? attrs['marca'] ?? '--'),
-                      _DetailRow(icon: FontAwesomeIcons.gears, label: "Disciplina", value: data['disciplinaDisplay'] ?? data['disciplina'] ?? '--'),
-                      _DetailRow(icon: FontAwesomeIcons.shapes, label: "Categoría", value: productCategory),
-                      _DetailRow(icon: FontAwesomeIcons.layerGroup, label: "Subcategoría", value: data['subcategoria'] ?? '--'),
+                      _DetailRow(
+                        icon: FontAwesomeIcons.barcode,
+                        label: "Serie",
+                        value: _formatUpperFallback(data['serie'] ?? attrs['serie']),
+                      ),
+                      _DetailRow(
+                        icon: FontAwesomeIcons.tag,
+                        label: "Marca",
+                        value: _formatUpperFallback(data['marca'] ?? attrs['marca']),
+                      ),
+                      _DetailRow(
+                        icon: FontAwesomeIcons.gears,
+                        label: "Disciplina",
+                        value: _formatTitleFallback(data['disciplinaDisplay'] ?? data['disciplina']),
+                      ),
+                      _CategoriaDetailRow(
+                        disciplinaKey: disciplinaKey,
+                        categoriaValue: productCategory,
+                      ),
+                      _DetailRow(
+                        icon: FontAwesomeIcons.layerGroup,
+                        label: "Subcategoría",
+                        value: _formatSubcategoriaFallback(data['subcategoria']),
+                      ),
                       _DetailRow(
                         icon: FontAwesomeIcons.calendarDay,
                         label: "Fecha de Instalación",
@@ -569,6 +591,57 @@ String _formatLabel(String value) {
       .split(' ')
       .map((word) => word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}')
       .join(' ');
+}
+
+String _formatUpperFallback(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty) return '--';
+  return formatUpperCase(text);
+}
+
+String _formatTitleFallback(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty) return '--';
+  return formatTitleCase(text);
+}
+
+String _formatSubcategoriaFallback(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty) return '--';
+  return formatSubcategoriaDisplay(text);
+}
+
+class _CategoriaDetailRow extends StatelessWidget {
+  final String disciplinaKey;
+  final String categoriaValue;
+
+  const _CategoriaDetailRow({
+    required this.disciplinaKey,
+    required this.categoriaValue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (disciplinaKey.isEmpty) {
+      return _DetailRow(
+        icon: FontAwesomeIcons.shapes,
+        label: "Categoría",
+        value: _formatTitleFallback(categoriaValue),
+      );
+    }
+    return FutureBuilder<List<CategoriaItem>>(
+      future: CategoriasService.instance.fetchByDisciplina(disciplinaKey),
+      builder: (context, snapshot) {
+        final label =
+            CategoriasService.instance.resolveLabel(disciplinaKey, categoriaValue) ?? categoriaValue;
+        return _DetailRow(
+          icon: FontAwesomeIcons.shapes,
+          label: "Categoría",
+          value: _formatTitleFallback(label),
+        );
+      },
+    );
+  }
 }
 
 class _DetailRow extends StatelessWidget {

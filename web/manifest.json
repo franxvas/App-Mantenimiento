@@ -1,11 +1,11 @@
 {
-    "name": "appmantflutter",
-    "short_name": "appmantflutter",
-    "start_url": ".",
+    "name": "Mantis",
+    "short_name": "Mantis",
+    "start_url": "/",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#8B1E1E",
+    "theme_color": "#8B1E1E",
+    "description": "Mantis - Gestión de mantenimiento.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

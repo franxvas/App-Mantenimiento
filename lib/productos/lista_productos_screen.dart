@@ -7,16 +7,22 @@ class ListaProductosScreen extends StatelessWidget {
   final String filterBy; // 'disciplina' o 'categoria'
   final String filterValue; // El valor del filtro (ej: 'luminarias', 'electricas')
   final String title; // El título para mostrar en la AppBar
+  final String? disciplinaKey;
+  final String? categoriaValue;
 
   const ListaProductosScreen({
     super.key,
     required this.filterBy,
     required this.filterValue,
     required this.title,
+    this.disciplinaKey,
+    this.categoriaValue,
   });
 
   @override
   Widget build(BuildContext context) {
+    final preselectDisciplina = disciplinaKey ?? (filterBy == 'disciplina' ? filterValue : null);
+    final preselectCategoria = categoriaValue ?? (filterBy == 'categoria' ? filterValue : null);
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
@@ -30,9 +36,15 @@ class ListaProductosScreen extends StatelessWidget {
             // --- SECCIÓN: FUERA DE SERVICIO ---
             const Padding(
               padding: EdgeInsets.only(top: 20, left: 15, bottom: 5),
-              child: Text(
-                "❌ FUERA DE SERVICIO", 
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)
+              child: Row(
+                children: [
+                  Icon(Icons.cancel, color: Colors.red, size: 18),
+                  SizedBox(width: 6),
+                  Text(
+                    "FUERA DE SERVICIO",
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
             ),
             
@@ -41,9 +53,15 @@ class ListaProductosScreen extends StatelessWidget {
             // --- SECCIÓN: DEFECTUOSO ---
             const Padding(
               padding: EdgeInsets.only(top: 30, left: 15, bottom: 5),
-              child: Text(
-                "⚠️ DEFECTUOSO",
-                style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                  SizedBox(width: 6),
+                  Text(
+                    "DEFECTUOSO",
+                    style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
             ),
 
@@ -52,9 +70,15 @@ class ListaProductosScreen extends StatelessWidget {
             // --- SECCIÓN: OPERATIVO ---
             const Padding(
               padding: EdgeInsets.only(top: 30, left: 15, bottom: 5),
-              child: Text(
-                "✅ OPERATIVO", 
-                style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 18),
+                  SizedBox(width: 6),
+                  Text(
+                    "OPERATIVO",
+                    style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
             ),
             
@@ -70,7 +94,10 @@ class ListaProductosScreen extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const AgregarProductoScreen(),
+              builder: (context) => AgregarProductoScreen(
+                initialDisciplinaKey: preselectDisciplina,
+                initialCategoriaValue: preselectCategoria,
+              ),
             ),
           );
         },

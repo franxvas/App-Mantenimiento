@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:appmantflutter/reportes/lista_reportes_por_categoria_screen.dart';
 import 'package:appmantflutter/shared/disciplinas_config.dart';
-import 'package:appmantflutter/shared/disciplinas_categorias.dart';
+import 'package:appmantflutter/services/categorias_service.dart';
 
-class CategoriasReporteScreen extends StatelessWidget {
+class CategoriasReporteScreen extends StatefulWidget {
   final String disciplinaId;
   final String disciplinaNombre;
 
@@ -14,14 +14,25 @@ class CategoriasReporteScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final categorias = categoriasPorDisciplina(disciplinaId);
+  State<CategoriasReporteScreen> createState() => _CategoriasReporteScreenState();
+}
 
+class _CategoriasReporteScreenState extends State<CategoriasReporteScreen> {
+  final _categoriasService = CategoriasService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _categoriasService.ensureSeededForDisciplina(widget.disciplinaId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
         title: Text(
-          "Reportes de $disciplinaNombre",
+          "Reportes de ${widget.disciplinaNombre}",
         ),
         centerTitle: true,
       ),
@@ -40,25 +51,37 @@ class CategoriasReporteScreen extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: categorias.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 15),
-              itemBuilder: (context, index) {
-                final item = categorias[index];
-                return _CategoriaCard(
-                  nombre: item.label,
-                  icon: item.icon,
-                  color: primaryRed,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ListaReportesPorCategoriaScreen(
-                          categoriaFilter: item.value,
-                          categoriaTitle: item.label,
-                        ),
-                      ),
+            child: StreamBuilder<List<CategoriaItem>>(
+              stream: _categoriasService.streamByDisciplina(widget.disciplinaId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final categorias = snapshot.data ?? const <CategoriaItem>[];
+                if (categorias.isEmpty) {
+                  return const Center(child: Text('No hay categorías disponibles.'));
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: categorias.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 15),
+                  itemBuilder: (context, index) {
+                    final item = categorias[index];
+                    return _CategoriaCard(
+                      nombre: item.label,
+                      icon: item.icon,
+                      color: primaryRed,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ListaReportesPorCategoriaScreen(
+                              categoriaFilter: item.value,
+                              categoriaTitle: item.label,
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                 );

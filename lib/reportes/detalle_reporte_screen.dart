@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:appmantflutter/services/pdf_service.dart';
 import 'package:appmantflutter/services/usuarios_cache_service.dart';
+import 'package:appmantflutter/services/categorias_service.dart';
+import 'package:appmantflutter/shared/text_formatters.dart';
 
 class DetalleReporteScreen extends StatelessWidget {
   final String reportId;
@@ -66,13 +67,14 @@ class DetalleReporteScreen extends StatelessWidget {
                 'registrado';
             final bool isCompleted = estado.toLowerCase() == 'completado' || estado.toLowerCase() == 'operativo';
 
-            final Timestamp? tsFecha = data['fechaInspeccion'] ?? data['fecha'];
-            final String fechaDisplay = tsFecha != null
-                ? DateFormat('dd/MM/yyyy - HH:mm').format(tsFecha.toDate())
-                : '--/--/----';
+            final DateTime? fechaEmision = _resolveFechaHora(data);
+            final String fechaDisplay =
+                fechaEmision == null ? '--/--/----' : formatDateTimeDMYHM(fechaEmision);
 
             final String comentarios = data['comentarios'] ?? '';
             final bool haySolucion = comentarios.isNotEmpty;
+            final String disciplinaKey = data['disciplina']?.toString().toLowerCase() ?? '';
+            final String categoriaValue = data['categoria']?.toString() ?? '';
 
             return Scaffold(
               backgroundColor: const Color(0xFFF0F2F5),
@@ -129,7 +131,16 @@ class DetalleReporteScreen extends StatelessWidget {
                       ),
                     ),
 
-                    _buildDetails(data),
+                    FutureBuilder<List<CategoriaItem>>(
+                      future: disciplinaKey.isEmpty
+                          ? Future.value(const <CategoriaItem>[])
+                          : CategoriasService.instance.fetchByDisciplina(disciplinaKey),
+                      builder: (context, snapshotCategorias) {
+                        final categoriaLabel =
+                            CategoriasService.instance.resolveLabel(disciplinaKey, categoriaValue) ?? categoriaValue;
+                        return _buildDetails(data, categoriaLabel: categoriaLabel);
+                      },
+                    ),
                     const SizedBox(height: 50),
                   ],
                 ),
@@ -183,6 +194,20 @@ class DetalleReporteScreen extends StatelessWidget {
     );
   }
 
+  DateTime? _resolveFechaHora(Map<String, dynamic> reporte) {
+    final value = reporte['createdAt'] ?? reporte['fechaEmision'] ?? reporte['fechaInspeccion'] ?? reporte['fecha'];
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
+
   Widget _buildSection({required String title, required IconData icon, required Widget content}) {
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -217,13 +242,13 @@ class DetalleReporteScreen extends StatelessWidget {
         .join(' ');
   }
 
-  Widget _buildDetails(Map<String, dynamic> data) {
+  Widget _buildDetails(Map<String, dynamic> data, {required String categoriaLabel}) {
     final ubicacion = data['ubicacion'] ?? {};
     final fields = <_DetailField>[
       _DetailField(label: "Responsable", value: UsuariosCacheService.instance.resolveResponsableName(data)),
       _DetailField(label: "Tipo de Reporte", value: _formatDisplayValue(data['tipoReporte'] ?? data['tipo_reporte'])),
       _DetailField(label: "Disciplina", value: _formatDisplayValue(data['disciplina'])),
-      _DetailField(label: "Categoría", value: _formatDisplayValue(data['categoria'])),
+      _DetailField(label: "Categoría", value: _formatDisplayValue(categoriaLabel)),
       _DetailField(label: "ID Sistema", value: data['productId']),
       _DetailField(label: "Bloque", value: _formatDisplayValue(ubicacion['bloque'])),
       _DetailField(label: "Nivel", value: _formatDisplayValue(ubicacion['nivel'] ?? ubicacion['piso'])),
@@ -237,6 +262,8 @@ class DetalleReporteScreen extends StatelessWidget {
       _DetailField(label: "Impacto falla", value: _formatDisplayValue(data['impactoFalla'])),
       _DetailField(label: "Riesgo normativo", value: _formatDisplayValue(data['riesgoNormativo'])),
       _DetailField(label: "Riesgo eléctrico", value: _formatDisplayValue(data['riesgoElectrico'])),
+      _DetailField(label: "Nivel desgaste", value: _formatDisplayValue(data['nivelDesgaste'])),
+      _DetailField(label: "Riesgo usuario", value: _formatDisplayValue(data['riesgoUsuario'])),
       _DetailField(label: "Acción recomendada", value: _formatDisplayValue(data['accionRecomendada'])),
       _DetailField(label: "Costo estimado", value: _formatNumber(data['costoEstimado'])),
       _DetailField(

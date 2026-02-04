@@ -26,6 +26,7 @@ dependencies:
   path_provider: ^2.1.4
   open_filex: ^4.4.0
   excel: ^4.0.2
+  file_picker: ^8.1.2
 
 
 dev_dependencies:
@@ -37,3 +38,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/excel_templates/
+    - assets/fonts/ArialUnicode.ttf
+  fonts:
+    - family: AppUnicode
+      fonts:
+        - asset: assets/fonts/ArialUnicode.ttf

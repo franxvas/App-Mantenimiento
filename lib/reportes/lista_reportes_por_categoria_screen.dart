@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+import 'package:appmantflutter/shared/text_formatters.dart';
 
 import 'package:appmantflutter/reportes/seleccionar_producto_reporte_screen.dart';
 import 'package:appmantflutter/reportes/detalle_reporte_screen.dart';
@@ -145,13 +145,9 @@ class _ReporteListCard extends StatelessWidget {
             ? Colors.orange
             : Colors.red;
     
-    final Timestamp? ts = reporte['fechaInspeccion'] ?? reporte['fecha'];
-    final String fecha = ts != null ? DateFormat('dd/MM/yyyy').format(ts.toDate()) : '--';
-    final String accionRecomendada = reporte['accionRecomendada'] ??
-        reporte['accion'] ??
-        reporte['descripcion'] ??
-        reporte['motivo'] ??
-        '';
+    final DateTime? fecha = _resolveFechaHora(reporte);
+    final String fechaDisplay = fecha == null ? '--/--/----' : formatDateTimeDMYHM(fecha);
+    final String tipoReporte = (reporte['tipoReporte'] ?? reporte['tipo_reporte'] ?? '').toString();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -187,8 +183,8 @@ class _ReporteListCard extends StatelessWidget {
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("N° ${reporte['nro']} • $fecha"),
-              Text(accionRecomendada, maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text("N° ${reporte['nro']} • $fechaDisplay"),
+              Text('Tipo: ${_formatDisplay(tipoReporte)}', maxLines: 1, overflow: TextOverflow.ellipsis),
             ],
           ),
           trailing: Column(
@@ -218,6 +214,31 @@ String _formatEstadoLabel(String estado) {
   final normalized = estado.replaceAll('_', ' ');
   if (normalized.isEmpty) {
     return estado;
+  }
+  return normalized
+      .split(' ')
+      .map((word) => word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}')
+      .join(' ');
+}
+
+DateTime? _resolveFechaHora(Map<String, dynamic> reporte) {
+  final value = reporte['createdAt'] ?? reporte['fechaEmision'] ?? reporte['fechaInspeccion'] ?? reporte['fecha'];
+  if (value is Timestamp) {
+    return value.toDate();
+  }
+  if (value is DateTime) {
+    return value;
+  }
+  if (value is String) {
+    return DateTime.tryParse(value);
+  }
+  return null;
+}
+
+String _formatDisplay(String value) {
+  final normalized = value.replaceAll('_', ' ').trim();
+  if (normalized.isEmpty) {
+    return value;
   }
   return normalized
       .split(' ')

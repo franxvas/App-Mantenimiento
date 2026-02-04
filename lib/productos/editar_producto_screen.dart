@@ -1,7 +1,9 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:appmantflutter/services/parametros_dataset_service.dart';
@@ -28,11 +30,18 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final _schemaService = SchemaService();
   final _parametrosSchemaService = ParametrosSchemaService();
   final _datasetService = ParametrosDatasetService();
+  bool _autoGenerarId = true;
+  bool _isCheckingId = false;
+  String? _idActivoError;
+  Timer? _idCheckDebounce;
+  String? _lastCheckedId;
+  bool? _lastCheckedUnique;
   
   final _nombreController = TextEditingController();
   final _descripcionController = TextEditingController();
   final _marcaController = TextEditingController();
   final _serieController = TextEditingController();
+  final _subcategoriaController = TextEditingController();
   final _nivelController = TextEditingController();
   final _bloqueController = TextEditingController();
   final _espacioController = TextEditingController();
@@ -71,6 +80,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
         (widget.initialData['attrs']?['marca']?.toString() ?? '');
     _serieController.text = widget.initialData['serie']?.toString() ??
         (widget.initialData['attrs']?['serie']?.toString() ?? '');
+    _subcategoriaController.text = widget.initialData['subcategoria']?.toString() ?? '';
     _nivelController.text = _resolveNivel(widget.initialData);
     _bloqueController.text = widget.initialData['bloque']?.toString() ??
         widget.initialData['ubicacion']?['bloque']?.toString() ??
@@ -119,6 +129,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _descripcionController.dispose();
     _marcaController.dispose();
     _serieController.dispose();
+    _subcategoriaController.dispose();
     _nivelController.dispose();
     _bloqueController.dispose();
     _espacioController.dispose();
@@ -135,6 +146,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _modeloController.dispose();
     _proveedorController.dispose();
     _observacionesController.dispose();
+    _idCheckDebounce?.cancel();
     for (final controller in _dynamicControllers.values) {
       controller.dispose();
     }
@@ -146,6 +158,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
     if (pickedFile != null) {
+      if (!mounted) return;
       setState(() {
         _imageFile = File(pickedFile.path);
       });
@@ -207,13 +220,36 @@ Future<String?> _uploadToSupabase() async {
     final currentCostoMantenimiento = currentData['costoMantenimiento'];
     final currentEstadoOperativo = currentData['estadoOperativo'] ?? currentData['estado'] ?? _estado;
 
-    final idActivo = ActivoIdHelper.buildId(
-      disciplinaKey: disciplinaKey,
-      nombre: _nombreController.text.trim(),
-      bloque: _bloqueController.text.trim(),
-      nivel: _nivelController.text.trim(),
-      correlativo: _idActivoCorrelativo,
-    );
+    String idActivo;
+    if (_autoGenerarId) {
+      idActivo = ActivoIdHelper.buildId(
+        disciplinaKey: disciplinaKey,
+        nombre: _nombreController.text.trim(),
+        bloque: _bloqueController.text.trim(),
+        nivel: _nivelController.text.trim(),
+        correlativo: _idActivoCorrelativo,
+      );
+      final unique = await _checkIdActivoUnique(idActivo);
+      if (!unique) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ese ID ya existe, usa otro.')),
+          );
+        }
+        return;
+      }
+    } else {
+      idActivo = _idActivoController.text.trim();
+      final unique = await _checkIdActivoUnique(idActivo);
+      if (!unique) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ese ID ya existe, usa otro.')),
+          );
+        }
+        return;
+      }
+    }
     final productData = {
       'nombre': _nombreController.text,
       'nombreProducto': _nombreController.text,
@@ -224,7 +260,7 @@ Future<String?> _uploadToSupabase() async {
       'disciplina': disciplinaKey,
       'categoria': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'categoriaActivo': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
-      'subcategoria': widget.initialData['subcategoria'],
+      'subcategoria': _subcategoriaController.text.trim().isEmpty ? null : _subcategoriaController.text.trim(),
       'idActivo': idActivo,
       'bloque': _bloqueController.text.trim(),
       'espacio': _espacioController.text.trim(),
@@ -350,6 +386,12 @@ Future<String?> _uploadToSupabase() async {
             _buildTextField(
               controller: _serieController,
               label: 'Serie',
+              hintText: _serieHint(),
+            ),
+            _buildTextField(
+              controller: _subcategoriaController,
+              label: 'Subcategoría',
+              hintText: _subcategoriaHint(),
             ),
 
             const SizedBox(height: 20),
@@ -382,14 +424,48 @@ Future<String?> _uploadToSupabase() async {
             const SizedBox(height: 16),
             const Text("Datos del Activo", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 10),
+            CheckboxListTile(
+              value: _autoGenerarId,
+              onChanged: (value) {
+                setState(() {
+                  _autoGenerarId = value ?? true;
+                  _idActivoError = null;
+                  _lastCheckedId = null;
+                  _lastCheckedUnique = null;
+                  if (_autoGenerarId) {
+                    _updateIdActivoPreview();
+                  }
+                });
+              },
+              title: const Text('Autogenerar ID'),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
             TextFormField(
               controller: _idActivoController,
-              decoration: const InputDecoration(
-                labelText: 'ID Activo (autogenerado)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: _autoGenerarId ? 'ID Activo (autogenerado)' : 'ID Activo',
+                border: const OutlineInputBorder(),
+                errorText: _idActivoError,
+                suffixIcon: _isCheckingId
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
               ),
-              readOnly: true,
-              enabled: false,
+              readOnly: _autoGenerarId,
+              enabled: true,
+              onChanged: _autoGenerarId
+                  ? null
+                  : (value) {
+                      setState(() => _idActivoError = null);
+                      _scheduleIdActivoCheck(value);
+                    },
             ),
             const SizedBox(height: 12),
             _buildTextField(
@@ -493,6 +569,9 @@ Future<String?> _uploadToSupabase() async {
   }
 
   void _updateIdActivoPreview() {
+    if (!_autoGenerarId) {
+      return;
+    }
     final preview = ActivoIdHelper.buildPreview(
       disciplinaKey: _disciplinaKey,
       nombre: _nombreController.text.trim(),
@@ -502,7 +581,49 @@ Future<String?> _uploadToSupabase() async {
     );
     setState(() {
       _idActivoController.text = preview;
+      _idActivoError = null;
     });
+  }
+
+  void _scheduleIdActivoCheck(String value) {
+    _idCheckDebounce?.cancel();
+    _idCheckDebounce = Timer(const Duration(milliseconds: 400), () {
+      _checkIdActivoUnique(value);
+    });
+  }
+
+  Future<bool> _checkIdActivoUnique(String rawValue) async {
+    final value = rawValue.trim();
+    if (value.isEmpty) {
+      if (!mounted) return false;
+      setState(() => _idActivoError = 'El ID es requerido.');
+      return false;
+    }
+    if (_lastCheckedId == value && _lastCheckedUnique != null) {
+      if (!mounted) return _lastCheckedUnique!;
+      setState(() => _idActivoError = _lastCheckedUnique! ? null : 'Ese ID ya existe, usa otro.');
+      return _lastCheckedUnique!;
+    }
+    if (!mounted) return false;
+    setState(() {
+      _isCheckingId = true;
+      _idActivoError = null;
+    });
+    final snapshot = await FirebaseFirestore.instance
+        .collection('productos')
+        .where('idActivo', isEqualTo: value)
+        .limit(2)
+        .get();
+    final conflict = snapshot.docs.any((doc) => doc.id != widget.productId);
+    final unique = !conflict;
+    if (!mounted) return unique;
+    setState(() {
+      _isCheckingId = false;
+      _idActivoError = unique ? null : 'Ese ID ya existe, usa otro.';
+      _lastCheckedId = value;
+      _lastCheckedUnique = unique;
+    });
+    return unique;
   }
 
   Widget _buildTextField({
@@ -515,6 +636,7 @@ Future<String?> _uploadToSupabase() async {
     bool readOnly = false,
     String? Function(String?)? validator,
     ValueChanged<String>? onChanged,
+    String? hintText,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -527,6 +649,7 @@ Future<String?> _uploadToSupabase() async {
         validator: validator,
         decoration: InputDecoration(
           labelText: label,
+          hintText: hintText,
           helperText: helperText,
           suffixIcon: suffixIcon,
           border: const OutlineInputBorder(),
@@ -633,4 +756,30 @@ Future<String?> _uploadToSupabase() async {
   }
 
   bool get _isMobiliarios => _disciplinaKey == 'mobiliarios';
+
+  String _subcategoriaHint() {
+    final key = _disciplinaKey.toLowerCase();
+    const hints = {
+      'electricas': 'Ej: luces_emergencia',
+      'sanitarias': 'Ej: grifos_lavamanos',
+      'estructuras': 'Ej: vigas_concreto',
+      'arquitectura': 'Ej: puertas_madera',
+      'mecanica': 'Ej: bombas_circulacion',
+      'mobiliarios': 'Ej: mesas_estudiante',
+    };
+    return hints[key] ?? 'Ej: subcategoria_equipo';
+  }
+
+  String _serieHint() {
+    final key = _disciplinaKey.toLowerCase();
+    const hints = {
+      'electricas': 'Ej: LE-2026-001',
+      'sanitarias': 'Ej: SA-2026-005',
+      'estructuras': 'Ej: ES-2026-007',
+      'arquitectura': 'Ej: AR-2026-012',
+      'mecanica': 'Ej: MC-2026-003',
+      'mobiliarios': 'Ej: ME-2026-010',
+    };
+    return hints[key] ?? 'Ej: EQ-2026-001';
+  }
 }

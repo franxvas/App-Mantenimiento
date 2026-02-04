@@ -2,9 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 
+import '../services/categorias_service.dart';
 import '../services/excel_export_service.dart';
 import '../services/usuarios_cache_service.dart';
 import '../scan/qr_scanner_screen.dart';
+import '../shared/text_formatters.dart';
 import 'parametros_templates.dart';
 
 class ParametrosViewerScreen extends StatefulWidget {
@@ -73,27 +75,48 @@ class _BaseViewer extends StatelessWidget {
           fromFirestore: (snapshot, _) => snapshot.data() ?? {},
           toFirestore: (data, _) => data,
         );
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: productsRef.where('disciplina', isEqualTo: disciplinaKey).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    return FutureBuilder<List<CategoriaItem>>(
+      future: CategoriasService.instance.fetchByDisciplina(disciplinaKey),
+      builder: (context, categoriaSnapshot) {
+        if (categoriaSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        if (!snapshot.hasData) {
-          return const Center(child: Text('No hay parámetros disponibles.'));
+        final categoriaMap = _buildCategoriaLabelMap(categoriaSnapshot.data ?? const []);
+        String? resolveCategoria(String? value) {
+          if (value == null || value.trim().isEmpty) {
+            return null;
+          }
+          final key = normalizeCategoriaValue(value);
+          if (key.isEmpty) return value;
+          return categoriaMap[key] ?? value;
         }
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: productsRef.where('disciplina', isEqualTo: disciplinaKey).snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        final rows = snapshot.data!.docs
-            .map((doc) => DatasetRow.fromBaseDocument(doc, columns))
-            .toList()
-          ..sort(DatasetRow.sortByNombre);
+            if (!snapshot.hasData) {
+              return const Center(child: Text('No hay parámetros disponibles.'));
+            }
 
-        return _ViewerContent(
-          columns: columns,
-          rows: rows,
-          disciplinaLabel: disciplinaLabel,
-          tipo: 'base',
+            final rows = snapshot.data!.docs
+                .map((doc) => DatasetRow.fromBaseDocument(
+                      doc,
+                      columns,
+                      categoriaLabelResolver: resolveCategoria,
+                    ))
+                .toList()
+              ..sort(DatasetRow.sortByNombre);
+
+            return _ViewerContent(
+              columns: columns,
+              rows: rows,
+              disciplinaLabel: disciplinaLabel,
+              tipo: 'base',
+            );
+          },
         );
       },
     );
@@ -340,15 +363,44 @@ class _ViewerContent extends StatelessWidget {
   Future<void> _generateExcel(BuildContext context) async {
     try {
       final excel = Excel.createExcel();
-      if (excel.sheets.keys.contains('Sheet1')) {
-        excel.rename('Sheet1', 'Parametros');
-      }
-      final sheet = excel['Parametros'];
       final headers = columns.map((column) => column.header).toList();
-      sheet.appendRow(headers.map(TextCellValue.new).toList());
-      for (final row in rows) {
-        final rowValues = headers.map((header) => _cellValue(row.values[header])).toList();
-        sheet.appendRow(rowValues);
+      if (tipo == 'base') {
+        final grouped = _groupRowsByCategoria(rows);
+        if (grouped.isEmpty) {
+          if (excel.sheets.keys.contains('Sheet1')) {
+            excel.rename('Sheet1', 'Parametros');
+          }
+          final sheet = excel['Parametros'];
+          sheet.appendRow(headers.map(TextCellValue.new).toList());
+        } else {
+          final usedNames = <String>{};
+          var index = 0;
+          grouped.forEach((categoria, categoriaRows) {
+            final baseName = _sanitizeSheetName(categoria);
+            final sheetName = _uniqueSheetName(baseName, usedNames);
+            usedNames.add(sheetName);
+            if (index == 0 && excel.sheets.keys.contains('Sheet1')) {
+              excel.rename('Sheet1', sheetName);
+            }
+            final sheet = excel[sheetName];
+            sheet.appendRow(headers.map(TextCellValue.new).toList());
+            for (final row in categoriaRows) {
+              final rowValues = headers.map((header) => _cellValue(row.values[header])).toList();
+              sheet.appendRow(rowValues);
+            }
+            index += 1;
+          });
+        }
+      } else {
+        if (excel.sheets.keys.contains('Sheet1')) {
+          excel.rename('Sheet1', 'Parametros');
+        }
+        final sheet = excel['Parametros'];
+        sheet.appendRow(headers.map(TextCellValue.new).toList());
+        for (final row in rows) {
+          final rowValues = headers.map((header) => _cellValue(row.values[header])).toList();
+          sheet.appendRow(rowValues);
+        }
       }
 
       final bytes = excel.save();
@@ -378,13 +430,65 @@ class _ViewerContent extends StatelessWidget {
     return TextCellValue(value.toString());
   }
 
+  Map<String, List<DatasetRow>> _groupRowsByCategoria(List<DatasetRow> rows) {
+    const categoriaHeader = 'Categoria_Activo';
+    final Map<String, List<DatasetRow>> grouped = {};
+    for (final row in rows) {
+      final raw = row.values[categoriaHeader]?.toString().trim() ?? '';
+      final categoria = raw.isEmpty ? 'Otros' : raw;
+      grouped.putIfAbsent(categoria, () => []).add(row);
+    }
+    return grouped;
+  }
+
+  String _sanitizeSheetName(String name) {
+    var cleaned = name.trim();
+    if (cleaned.isEmpty) {
+      cleaned = 'Otros';
+    }
+    cleaned = cleaned.replaceAll(RegExp(r'[:\\\\/?*\\[\\]]'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\\s+'), ' ').trim();
+    if (cleaned.isEmpty) {
+      cleaned = 'Otros';
+    }
+    if (cleaned.length > 31) {
+      cleaned = cleaned.substring(0, 31);
+    }
+    return cleaned;
+  }
+
+  String _uniqueSheetName(String base, Set<String> used) {
+    if (!used.contains(base)) {
+      return base;
+    }
+    var index = 2;
+    while (true) {
+      final suffix = ' ($index)';
+      final maxLen = 31 - suffix.length;
+      final prefix = base.length > maxLen ? base.substring(0, maxLen) : base;
+      final candidate = '$prefix$suffix';
+      if (!used.contains(candidate)) {
+        return candidate;
+      }
+      index += 1;
+    }
+  }
+
   String _buildFilename() {
-    final now = DateTime.now();
-    final date = '${now.year.toString().padLeft(4, '0')}'
-        '${now.month.toString().padLeft(2, '0')}'
-        '${now.day.toString().padLeft(2, '0')}';
-    final tipoLabel = tipo == 'base' ? 'Base' : 'Reportes';
-    return '${disciplinaLabel}_${tipoLabel}_$date.xlsx';
+    if (tipo == 'base') {
+      final key = normalizeCategoriaValue(disciplinaLabel);
+      final map = <String, String>{
+        'electricas': 'Electricas',
+        'mobiliarios': 'Mobiliario',
+        'mecanica': 'Mecanica',
+        'arquitectura': 'Arquitectura',
+        'sanitarias': 'Sanitarias',
+        'estructuras': 'Estructuras',
+      };
+      final label = map[key] ?? disciplinaLabel;
+      return '${label}_Base_ES.xlsx';
+    }
+    return '${disciplinaLabel}_Reportes_ES.xlsx';
   }
 
   String _stringify(dynamic value) {
@@ -409,6 +513,21 @@ DateTime _resolveReportDate(Map<String, dynamic> data) {
   return DateTime.fromMillisecondsSinceEpoch(0);
 }
 
+Map<String, String> _buildCategoriaLabelMap(List<CategoriaItem> items) {
+  final map = <String, String>{};
+  for (final item in items) {
+    final valueKey = normalizeCategoriaValue(item.value);
+    if (valueKey.isNotEmpty) {
+      map[valueKey] = item.label;
+    }
+    final labelKey = normalizeCategoriaValue(item.label);
+    if (labelKey.isNotEmpty) {
+      map[labelKey] = item.label;
+    }
+  }
+  return map;
+}
+
 class DatasetColumn {
   final String header;
   final int order;
@@ -431,16 +550,25 @@ class DatasetRow {
 
   factory DatasetRow.fromBaseDocument(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
-    List<DatasetColumn> columns,
+    List<DatasetColumn> columns, {
+    String? Function(String? value)? categoriaLabelResolver,
+  }
   ) {
     final values = <String, dynamic>{};
     final nombre = doc.data()['nombre']?.toString() ?? '';
 
     for (final column in columns) {
-      values[column.header] = valueForHeader(
+      var value = valueForHeader(
         column.header,
         productDoc: doc,
       );
+      if (column.header == 'Categoria_Activo' && categoriaLabelResolver != null) {
+        final resolved = categoriaLabelResolver(value?.toString());
+        if (resolved != null && resolved.trim().isNotEmpty) {
+          value = resolved;
+        }
+      }
+      values[column.header] = value;
     }
 
     final sortKey = nombre.isNotEmpty ? nombre.toLowerCase() : doc.id.toLowerCase();

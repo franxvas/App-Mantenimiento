@@ -1,12 +1,14 @@
 import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:pdf/widgets.dart' show PdfGoogleFonts;
-import 'package:printing/printing.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:appmantflutter/services/usuarios_cache_service.dart';
+import 'package:flutter/services.dart';
+import 'package:appmantflutter/services/categorias_service.dart';
+import 'package:appmantflutter/services/file_save_service.dart';
+import 'package:appmantflutter/shared/text_formatters.dart';
 
 class PdfService {
   
@@ -30,25 +32,38 @@ class PdfService {
       }
     }
 
-    final fontRegular = await PdfGoogleFonts.notoSansRegular();
-    final fontBold = await PdfGoogleFonts.notoSansBold();
+    final fonts = await _loadFonts();
     final pdf = pw.Document(
       theme: pw.ThemeData.withFont(
-        base: fontRegular,
-        bold: fontBold,
+        base: fonts.regular,
+        bold: fonts.bold,
+        italic: fonts.italic,
+        boldItalic: fonts.boldItalic,
       ),
     );
 
     try {
+      final disciplinaKey = producto['disciplina']?.toString().toLowerCase() ?? '';
+      final bool isMobiliarios = disciplinaKey == 'mobiliarios';
+      final categoriaLabel =
+          await _resolveCategoriaLabel(disciplinaKey, producto['categoria']?.toString());
+
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(32),
           build: (pw.Context context) {
             return [
-              _buildHeader(producto, productId),
+              _buildHeader(producto, productId, categoriaLabel),
               pw.SizedBox(height: 20),
-              _buildProductInfo(producto, imageBytes),
+              _buildPdfSection(
+                "Resumen del Activo",
+                _buildResumenActivo(producto, imageBytes, isMobiliarios),
+              ),
+              if (isMobiliarios) ...[
+                pw.SizedBox(height: 10),
+                _buildPdfSection("Especificaciones (Mobiliario)", _buildMobiliarioSpecs(producto)),
+              ],
               pw.SizedBox(height: 20),
               _buildPdfSection("Ubicación", _buildLocationInfo(producto)),
               pw.SizedBox(height: 10),
@@ -60,7 +75,14 @@ class PdfService {
         ),
       );
 
-      await Printing.sharePdf(bytes: await pdf.save(), filename: 'Ficha_${producto['nombre']}.pdf');
+      final idActivo = producto['idActivo']?.toString().trim();
+      final safeId = (idActivo == null || idActivo.isEmpty) ? productId : idActivo;
+      final filename = 'FichaTecnica_$safeId.pdf';
+      await saveFileBytes(
+        bytes: await pdf.save(),
+        filename: filename,
+        mimeType: 'application/pdf',
+      );
       
     } catch (e) {
         print("ERROR GENERANDO FICHA TÉCNICA: $e");
@@ -73,17 +95,19 @@ class PdfService {
     required String reportId,
   }) async {
     await UsuariosCacheService.instance.preload();
-    final fontRegular = await PdfGoogleFonts.notoSansRegular();
-    final fontBold = await PdfGoogleFonts.notoSansBold();
+    final fonts = await _loadFonts();
     final pdf = pw.Document(
       theme: pw.ThemeData.withFont(
-        base: fontRegular,
-        bold: fontBold,
+        base: fonts.regular,
+        bold: fonts.bold,
+        italic: fonts.italic,
+        boldItalic: fonts.boldItalic,
       ),
     );
     
     final String nro = reporte['nro'] ?? '0000';
-    final String fecha = _formatDate(reporte['fechaInspeccion'] ?? reporte['fecha']);
+    final DateTime? fechaEmision = _resolveFechaEmision(reporte);
+    final String fecha = fechaEmision == null ? '--/--/----' : formatDateTimeDMYHM(fechaEmision);
     final String nombreEquipo = reporte['activo_nombre'] ?? reporte['activoNombre'] ?? 'N/A';
     final String estadoNuevo =
         (reporte['estadoNuevo'] ?? reporte['estadoOperativo'] ?? reporte['estado_nuevo'] ?? reporte['estado'])
@@ -116,6 +140,8 @@ class PdfService {
         ? ''
         : (reporte['requiereReemplazo'] == true ? 'Sí' : 'No');
     final String costoEstimado = _formatNumber(reporte['costoEstimado'] ?? reporte['costo']);
+    final String disciplinaKey = reporte['disciplina']?.toString().toLowerCase() ?? '';
+    final String? categoriaLabel = await _resolveCategoriaLabel(disciplinaKey, reporte['categoria']?.toString());
 
     try {
       pdf.addPage(
@@ -132,7 +158,7 @@ class PdfService {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    _infoRow("Fecha de Emisión:", fecha),
+                    _infoRow("Fecha y Hora de Emision:", fecha),
                     _infoRow("Responsable:", responsable),
                     _infoRow("Tipo de Reporte:", tipoReporteLabel),
                     _infoRow("Estado Final del Equipo:", estadoFinalLabel),
@@ -142,24 +168,25 @@ class PdfService {
               
               _buildPdfSection(
                 "Datos del Equipo",
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    _infoRow("Equipo:", nombreEquipo),
-                    _infoRow("Categoría:", _formatTitleCase(reporte['categoria']?.toString() ?? '')),
-                    _infoRow("ID Sistema:", reporte['productId']),
+                _buildPills(
+                  [
+                    _PillData(label: 'Equipo', value: nombreEquipo),
+                    _PillData(
+                      label: 'Categoria',
+                      value: _formatTitleCase(categoriaLabel ?? reporte['categoria']?.toString() ?? ''),
+                    ),
+                    _PillData(label: 'ID Sistema', value: reporte['productId']),
                   ],
                 ),
               ),
 
               _buildPdfSection(
                 "Ubicación del Equipo",
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    _infoRow("Bloque:", ubicacion['bloque']),
-                    _infoRow("Nivel:", ubicacion['nivel'] ?? ubicacion['piso']),
-                    _infoRow("Área:", ubicacion['area']),
+                _buildPills(
+                  [
+                    _PillData(label: 'Bloque', value: ubicacion['bloque']),
+                    _PillData(label: 'Nivel', value: ubicacion['nivel'] ?? ubicacion['piso']),
+                    _PillData(label: 'Area', value: ubicacion['area']),
                   ],
                 ),
               ),
@@ -178,6 +205,8 @@ class PdfService {
                     _PillData(label: 'Impacto falla', value: impactoFallaLabel),
                     _PillData(label: 'Riesgo normativo', value: riesgoNormativoLabel),
                     _PillData(label: 'Riesgo eléctrico', value: riesgoElectricoLabel),
+                    _PillData(label: 'Nivel desgaste', value: _formatTitleCase(reporte['nivelDesgaste']?.toString() ?? '')),
+                    _PillData(label: 'Riesgo usuario', value: _formatTitleCase(reporte['riesgoUsuario']?.toString() ?? '')),
                     _PillData(label: 'Acción recomendada', value: accionRecomendadaLabel),
                     _PillData(label: 'Costo estimado', value: costoEstimado),
                     if (!esReemplazo) _PillData(label: 'Requiere reemplazo', value: requiereReemplazo),
@@ -194,7 +223,12 @@ class PdfService {
                     color: PdfColors.grey100,
                     borderRadius: pw.BorderRadius.circular(4)
                   ),
-                  child: pw.Text(reporte['descripcion'] ?? 'Sin descripción detallada.', style: const pw.TextStyle(fontSize: 11))
+                  child: pw.Text(
+                    reporte['descripcion'] ??
+                        reporte['estadoDetectado'] ??
+                        'Sin descripción detallada.',
+                    style: const pw.TextStyle(fontSize: 11),
+                  ),
                 )
               ),
               
@@ -207,7 +241,12 @@ class PdfService {
                     color: PdfColors.grey100,
                     borderRadius: pw.BorderRadius.circular(4)
                   ),
-                  child: pw.Text(reporte['comentarios'] ?? 'No se registraron comentarios adicionales.', style: const pw.TextStyle(fontSize: 11))
+                  child: pw.Text(
+                    reporte['comentarios'] ??
+                        reporte['accionRecomendada'] ??
+                        'No se registraron comentarios adicionales.',
+                    style: const pw.TextStyle(fontSize: 11),
+                  )
                 )
               ),
               
@@ -234,7 +273,12 @@ class PdfService {
         ),
       );
 
-      await Printing.sharePdf(bytes: await pdf.save(), filename: 'Reporte_$nro.pdf');
+      final filename = 'ReporteTecnico_$reportId.pdf';
+      await saveFileBytes(
+        bytes: await pdf.save(),
+        filename: filename,
+        mimeType: 'application/pdf',
+      );
       
     } catch (e) {
       print("ERROR GENERANDO REPORTE PDF: $e");
@@ -295,27 +339,75 @@ class PdfService {
     );
   }
 
-  static pw.Widget _buildHeader(Map<String, dynamic> data, String id) {
+  static pw.Widget _buildHeader(Map<String, dynamic> data, String id, String? categoriaLabel) {
+    final idActivo = data['idActivo']?.toString() ?? id;
+    final disciplina = _formatTitleCase(data['disciplina']?.toString() ?? '');
+    final categoria = _formatTitleCase(categoriaLabel ?? data['categoria']?.toString() ?? '');
+    final subcategoria = _formatTitleCase(data['subcategoria']?.toString() ?? '');
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
-        pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text("FICHA TÉCNICA DE EQUIPO", style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-            pw.Text("ID Sistema: $id", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
-          ],
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                "FICHA TECNICA DE EQUIPO",
+                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+              ),
+              pw.Text("ID Sistema: $id", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+              pw.SizedBox(height: 6),
+              pw.Text("ID Activo: $idActivo", style: const pw.TextStyle(fontSize: 10)),
+              if (disciplina.isNotEmpty) pw.Text("Disciplina: $disciplina", style: const pw.TextStyle(fontSize: 10)),
+              if (categoria.isNotEmpty) pw.Text("Categoria: $categoria", style: const pw.TextStyle(fontSize: 10)),
+              if (subcategoria.isNotEmpty) pw.Text("Subcategoria: $subcategoria", style: const pw.TextStyle(fontSize: 10)),
+            ],
+          ),
         ),
         pw.Container(
           padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blue900), borderRadius: pw.BorderRadius.circular(4)),
-          child: pw.Text(_formatTitleCase(data['estado']?.toString() ?? 'N/A'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+          child: pw.Text(
+            _formatTitleCase((data['estadoOperativo'] ?? data['estado'])?.toString() ?? 'N/A'),
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+          ),
         ),
       ],
     );
   }
 
-  static pw.Widget _buildProductInfo(Map<String, dynamic> data, Uint8List? imageBytes) {
+  static pw.Widget _buildResumenActivo(
+    Map<String, dynamic> data,
+    Uint8List? imageBytes,
+    bool isMobiliarios,
+  ) {
+    final List<pw.Widget> leftColumn = [];
+    void addInfo(String label, dynamic value, {bool formatTitle = false}) {
+      final text = value?.toString() ?? '';
+      if (text.trim().isEmpty) {
+        return;
+      }
+      leftColumn.add(_infoRow(label, formatTitle ? _formatTitleCase(text) : text));
+    }
+
+    addInfo("Equipo:", data['nombre'] ?? data['nombreProducto']);
+    addInfo("Marca:", data['marca']);
+    addInfo("Serie:", data['serie']);
+    addInfo("Codigo QR:", data['codigoQR']);
+    addInfo("Proveedor:", data['proveedor']);
+    addInfo("Fabricante:", data['fabricante']);
+    if (isMobiliarios) {
+      addInfo("Condicion fisica:", data['condicionFisica'], formatTitle: true);
+      addInfo("Criticidad:", data['nivelCriticidad'], formatTitle: true);
+    }
+
+    final descripcion = data['descripcion']?.toString().trim() ?? '';
+    if (descripcion.isNotEmpty) {
+      leftColumn.add(pw.SizedBox(height: 6));
+      leftColumn.add(pw.Text("Descripcion:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)));
+      leftColumn.add(pw.Text(descripcion, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)));
+    }
+
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -323,50 +415,64 @@ class PdfService {
           flex: 3,
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              _infoRow("Equipo:", data['nombre']),
-              _infoRow("Marca:", data['marca']),
-              _infoRow("Serie:", data['serie']),
-              _infoRow("Código QR:", data['codigoQR']),
-              _infoRow("Categoría:", _formatTitleCase(data['categoria']?.toString() ?? '')),
-              _infoRow("Disciplina:", _formatTitleCase(data['disciplina']?.toString() ?? '')),
-              pw.SizedBox(height: 10),
-              pw.Text("Descripción:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text(data['descripcion'] ?? 'Sin descripción', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-            ],
+            children: leftColumn,
           ),
         ),
         pw.SizedBox(width: 20),
-        if (imageBytes != null)
-          pw.Container(
-            width: 150,
-            height: 150,
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: PdfColors.grey300),
-            ),
-            child: pw.Image(pw.MemoryImage(imageBytes), fit: pw.BoxFit.contain),
-          )
-        else
-          pw.Container(
-            width: 150,
-            height: 150,
-            color: PdfColors.grey200,
-            child: pw.Center(child: pw.Text("Sin Imagen")),
+        pw.Container(
+          width: 140,
+          height: 140,
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey300),
+            color: imageBytes == null ? PdfColors.grey200 : null,
           ),
+          child: imageBytes != null
+              ? pw.Image(pw.MemoryImage(imageBytes), fit: pw.BoxFit.contain)
+              : pw.Center(child: pw.Text("Sin imagen")),
+        ),
       ],
     );
   }
 
   static pw.Widget _buildLocationInfo(Map<String, dynamic> data) {
       final ubicacion = data['ubicacion'] ?? {};
-      return pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-              _infoRow("Bloque:", ubicacion['bloque']), 
-              _infoRow("Nivel:", ubicacion['nivel'] ?? ubicacion['piso']),   
-              _infoRow("Área:", ubicacion['area']),     
-          ],
+      return _buildPills(
+        [
+          _PillData(label: 'Bloque', value: ubicacion['bloque']),
+          _PillData(label: 'Nivel', value: ubicacion['nivel'] ?? ubicacion['piso']),
+          _PillData(label: 'Area', value: ubicacion['area']),
+        ],
       );
+  }
+
+  static pw.Widget _buildMobiliarioSpecs(Map<String, dynamic> data) {
+    return _buildPills(
+      [
+        _PillData(label: 'Tipo mobiliario', value: data['tipoMobiliario']),
+        _PillData(label: 'Material principal', value: data['materialPrincipal']),
+        _PillData(label: 'Modelo', value: data['modelo']),
+        _PillData(label: 'Fecha adquisicion', value: _formatDate(data['fechaAdquisicion'])),
+        _PillData(label: 'Vida util (anios)', value: _formatNumber(data['vidaUtilEsperadaAnios'])),
+        _PillData(label: 'Costo reemplazo', value: _formatNumber(data['costoReemplazo'])),
+        _PillData(label: 'Movilidad', value: _formatTitleCase(data['movilidad']?.toString() ?? '')),
+      ],
+    );
+  }
+
+  static pw.Widget _buildNotasObservaciones(Map<String, dynamic> data) {
+    final notas = data['observaciones'] ?? data['notas'] ?? data['descripcion'] ?? '';
+    if (notas.toString().trim().isEmpty) {
+      return pw.Text("Sin observaciones registradas.", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600));
+    }
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey100,
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Text(notas.toString(), style: const pw.TextStyle(fontSize: 11)),
+    );
   }
 
   static pw.Widget _buildReportsTable(List<Map<String, dynamic>> reportes) {
@@ -392,7 +498,7 @@ class PdfService {
           final estadoOperativo = reporte['estadoOperativo'] ?? reporte['estadoNuevo'] ?? reporte['estado_nuevo'] ?? 'N/A';
           final tipoMantenimiento = reporte['tipoMantenimiento'];
           final fechaRaw = reporte['fechaInspeccion'] ?? reporte['fecha'];
-          final fecha = _formatDate(fechaRaw);
+          final fecha = _formatDateTime(fechaRaw);
           final requiereReemplazo = reporte['requiereReemplazo'];
           final isReemplazo = _normalizeKey(tipoReporte) == 'reemplazo';
           final showRequiere = !isReemplazo &&
@@ -448,12 +554,29 @@ class PdfService {
     }
   }
 
+  static DateTime? _resolveFechaEmision(Map<String, dynamic> reporte) {
+    final value = reporte['createdAt'] ?? reporte['fechaEmision'] ?? reporte['fechaInspeccion'] ?? reporte['fecha'];
+    final date = _resolveDate(value);
+    if (date.year <= 1970) {
+      return null;
+    }
+    return date;
+  }
+
   static String _formatDate(dynamic value) {
     final date = _resolveDate(value);
     if (date.year <= 1970) {
       return '--/--/----';
     }
     return DateFormat('dd/MM/yyyy').format(date);
+  }
+
+  static String _formatDateTime(dynamic value) {
+    final date = _resolveDate(value);
+    if (date.year <= 1970) {
+      return '--/--/----';
+    }
+    return formatDateTimeDMYHM(date);
   }
 
   static String _formatNumber(dynamic value) {
@@ -520,6 +643,29 @@ class PdfService {
       ],
     );
   }
+
+  static Future<_PdfFonts> _loadFonts() async {
+    if (_cachedFonts != null) {
+      return _cachedFonts!;
+    }
+    final data = await rootBundle.load('assets/fonts/ArialUnicode.ttf');
+    final font = pw.Font.ttf(data);
+    _cachedFonts = _PdfFonts(
+      regular: font,
+      bold: font,
+      italic: font,
+      boldItalic: font,
+    );
+    return _cachedFonts!;
+  }
+
+  static Future<String?> _resolveCategoriaLabel(String disciplinaKey, String? categoriaValue) async {
+    if (disciplinaKey.isEmpty || categoriaValue == null || categoriaValue.trim().isEmpty) {
+      return null;
+    }
+    await CategoriasService.instance.fetchByDisciplina(disciplinaKey);
+    return CategoriasService.instance.resolveLabel(disciplinaKey, categoriaValue);
+  }
 }
 
 class _PillData {
@@ -528,3 +674,19 @@ class _PillData {
 
   const _PillData({required this.label, required this.value});
 }
+
+class _PdfFonts {
+  final pw.Font regular;
+  final pw.Font bold;
+  final pw.Font italic;
+  final pw.Font boldItalic;
+
+  const _PdfFonts({
+    required this.regular,
+    required this.bold,
+    required this.italic,
+    required this.boldItalic,
+  });
+}
+
+_PdfFonts? _cachedFonts;

@@ -51,8 +51,10 @@ class MiAppMantenimiento extends StatelessWidget {
     const primaryRed = Color(0xFF8B1E1E);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Mantenimiento App',
+      title: 'Mantis',
       theme: ThemeData(
+        fontFamily: 'AppUnicode',
+        fontFamilyFallback: const ['AppUnicode'],
         colorScheme: ColorScheme.fromSeed(
           seedColor: primaryRed,
           primary: primaryRed,

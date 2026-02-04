@@ -8,10 +8,18 @@ import 'package:appmantflutter/services/parametros_dataset_service.dart';
 import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
 import 'package:appmantflutter/services/activo_id_helper.dart';
-import 'package:appmantflutter/shared/disciplinas_categorias.dart';
+import 'package:appmantflutter/services/categorias_service.dart';
+import 'dart:async';
 
 class AgregarProductoScreen extends StatefulWidget {
-  const AgregarProductoScreen({super.key});
+  final String? initialDisciplinaKey;
+  final String? initialCategoriaValue;
+
+  const AgregarProductoScreen({
+    super.key,
+    this.initialDisciplinaKey,
+    this.initialCategoriaValue,
+  });
 
   @override
   State<AgregarProductoScreen> createState() => _AgregarProductoScreenState();
@@ -20,6 +28,13 @@ class AgregarProductoScreen extends StatefulWidget {
 class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isUploading = false;
+  bool _autoGenerarId = true;
+  bool _isCheckingId = false;
+  String? _idActivoError;
+  Timer? _idCheckDebounce;
+  String? _lastCheckedId;
+  bool? _lastCheckedUnique;
+  bool _initialCategoriaAplicada = false;
 
   final _schemaService = SchemaService();
   final _parametrosSchemaService = ParametrosSchemaService();
@@ -29,6 +44,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   final _descripcionCtrl = TextEditingController();
   final _marcaCtrl = TextEditingController();
   final _serieCtrl = TextEditingController();
+  final _subcategoriaCtrl = TextEditingController();
 
   final _bloqueCtrl = TextEditingController();
   final _nivelCtrl = TextEditingController();
@@ -48,9 +64,11 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
 
   final Map<String, TextEditingController> _dynamicControllers = {};
 
+  final _categoriasService = CategoriasService.instance;
+  StreamSubscription<List<CategoriaItem>>? _categoriasSub;
+  List<CategoriaItem> _categorias = [];
   String? _categoria;
   String _disciplina = 'Electricas';
-  String _subcategoria = 'luces_emergencia';
   String _estado = 'operativo';
   String _condicionFisica = 'buena';
   String _tipoMantenimiento = 'preventivo';
@@ -71,6 +89,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     _descripcionCtrl.dispose();
     _marcaCtrl.dispose();
     _serieCtrl.dispose();
+    _subcategoriaCtrl.dispose();
     _bloqueCtrl.dispose();
     _nivelCtrl.dispose();
     _areaCtrl.dispose();
@@ -89,6 +108,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     for (final controller in _dynamicControllers.values) {
       controller.dispose();
     }
+    _categoriasSub?.cancel();
+    _idCheckDebounce?.cancel();
     super.dispose();
   }
 
@@ -96,17 +117,50 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   void initState() {
     super.initState();
     _parametrosSchemaService.seedSchemasIfMissing();
+    _setInitialDisciplina();
     _updateIdActivoPreview();
-    final categorias = _categoriasForDisciplina(_disciplina);
-    if (categorias.isNotEmpty) {
-      _categoria = categorias.first.value;
+    _subscribeCategorias();
+  }
+
+  void _setInitialDisciplina() {
+    final initialKey = widget.initialDisciplinaKey?.toLowerCase().trim();
+    if (initialKey == null || initialKey.isEmpty) {
+      return;
     }
+    final label = _disciplinaLabelForKey(initialKey);
+    if (label.isNotEmpty) {
+      _disciplina = label;
+    }
+  }
+
+  Future<void> _subscribeCategorias() async {
+    final disciplinaKey = _disciplina.toLowerCase();
+    await _categoriasService.ensureSeededForDisciplina(disciplinaKey);
+    await _categoriasSub?.cancel();
+    _categoriasSub = _categoriasService.streamByDisciplina(disciplinaKey).listen((items) {
+      if (!mounted) return;
+      setState(() {
+        _categorias = items;
+        final initialValue = widget.initialCategoriaValue?.trim();
+        if (!_initialCategoriaAplicada && initialValue != null && initialValue.isNotEmpty) {
+          final exists = _categorias.any((item) => item.value == initialValue);
+          if (exists) {
+            _categoria = initialValue;
+          }
+          _initialCategoriaAplicada = true;
+        }
+        if (_categoria == null || !_categorias.any((item) => item.value == _categoria)) {
+          _categoria = _categorias.isNotEmpty ? _categorias.first.value : null;
+        }
+      });
+    });
   }
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
+      if (!mounted) return;
       setState(() => _imageFile = File(pickedFile.path));
     }
   }
@@ -136,21 +190,48 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       );
       return;
     }
+    if (!_autoGenerarId) {
+      final manualId = _idActivoCtrl.text.trim();
+      final unique = await _checkIdActivoUnique(manualId);
+      if (!unique) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ese ID ya existe, usa otro.')),
+          );
+        }
+        return;
+      }
+    }
     setState(() => _isUploading = true);
 
     try {
       final String? imageUrl = await _uploadImageToSupabase();
 
       final disciplinaKey = _disciplina.toLowerCase();
-      final int activoCounter = await _getAndIncrementActivoCounter(disciplinaKey);
-      final correlativo = ActivoIdHelper.formatCorrelativo(activoCounter);
-      final String idActivo = ActivoIdHelper.buildId(
-        disciplinaKey: disciplinaKey,
-        nombre: _nombreCtrl.text.trim(),
-        bloque: _bloqueCtrl.text.trim(),
-        nivel: _nivelCtrl.text.trim(),
-        correlativo: correlativo,
-      );
+      String idActivo;
+      if (_autoGenerarId) {
+        final int activoCounter = await _getAndIncrementActivoCounter(disciplinaKey);
+        final correlativo = ActivoIdHelper.formatCorrelativo(activoCounter);
+        idActivo = ActivoIdHelper.buildId(
+          disciplinaKey: disciplinaKey,
+          nombre: _nombreCtrl.text.trim(),
+          bloque: _bloqueCtrl.text.trim(),
+          nivel: _nivelCtrl.text.trim(),
+          correlativo: correlativo,
+        );
+        final unique = await _checkIdActivoUnique(idActivo);
+        if (!unique) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ese ID ya existe, usa otro.')),
+            );
+            setState(() => _isUploading = false);
+          }
+          return;
+        }
+      } else {
+        idActivo = _idActivoCtrl.text.trim();
+      }
       final String codigoQr = idActivo;
 
       final schema = await _schemaService.fetchSchema(_disciplina.toLowerCase());
@@ -166,7 +247,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         'categoria': _categoria,
         'categoriaActivo': _categoria,
         'disciplina': disciplinaKey,
-        'subcategoria': _subcategoria,
+        'subcategoria': _subcategoriaCtrl.text.trim().isEmpty ? null : _subcategoriaCtrl.text.trim(),
         'estado': _estado,
         'estadoOperativo': _estado,
         'fechaInstalacion': _fechaInstalacionCustom ? _fechaInstalacion : FieldValue.serverTimestamp(),
@@ -218,13 +299,20 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     } finally {
-      setState(() => _isUploading = false);
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
     }
   }
 
   void _updateIdActivoPreview() {
+    if (!_autoGenerarId) {
+      return;
+    }
     final disciplinaKey = _disciplina.toLowerCase();
     final preview = ActivoIdHelper.buildPreview(
       disciplinaKey: disciplinaKey,
@@ -234,12 +322,72 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     );
     setState(() {
       _idActivoCtrl.text = preview;
+      _idActivoError = null;
     });
+  }
+
+  String _disciplinaLabelForKey(String disciplinaKey) {
+    switch (disciplinaKey.toLowerCase()) {
+      case 'electricas':
+        return 'Electricas';
+      case 'sanitarias':
+        return 'Sanitarias';
+      case 'estructuras':
+        return 'Estructuras';
+      case 'arquitectura':
+        return 'Arquitectura';
+      case 'mecanica':
+        return 'Mecanica';
+      case 'mobiliarios':
+        return 'Mobiliarios';
+      default:
+        return '';
+    }
+  }
+
+  void _scheduleIdActivoCheck(String value) {
+    _idCheckDebounce?.cancel();
+    _idCheckDebounce = Timer(const Duration(milliseconds: 400), () {
+      _checkIdActivoUnique(value);
+    });
+  }
+
+  Future<bool> _checkIdActivoUnique(String rawValue) async {
+    final value = rawValue.trim();
+    if (value.isEmpty) {
+      if (!mounted) return false;
+      setState(() => _idActivoError = 'El ID es requerido.');
+      return false;
+    }
+    if (_lastCheckedId == value && _lastCheckedUnique != null) {
+      if (!mounted) return _lastCheckedUnique!;
+      setState(() => _idActivoError = _lastCheckedUnique! ? null : 'Ese ID ya existe, usa otro.');
+      return _lastCheckedUnique!;
+    }
+    if (!mounted) return false;
+    setState(() {
+      _isCheckingId = true;
+      _idActivoError = null;
+    });
+    final snapshot = await FirebaseFirestore.instance
+        .collection('productos')
+        .where('idActivo', isEqualTo: value)
+        .limit(1)
+        .get();
+    final unique = snapshot.docs.isEmpty;
+    if (!mounted) return unique;
+    setState(() {
+      _isCheckingId = false;
+      _idActivoError = unique ? null : 'Ese ID ya existe, usa otro.';
+      _lastCheckedId = value;
+      _lastCheckedUnique = unique;
+    });
+    return unique;
   }
 
   @override
   Widget build(BuildContext context) {
-    final categorias = _categoriasForDisciplina(_disciplina);
+    final categorias = _categorias;
     return Scaffold(
       appBar: AppBar(
         title: const Text("Agregar Activo"),
@@ -284,15 +432,12 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                 (v) {
                   setState(() {
                     _disciplina = v!;
-                    final nextCategorias = _categoriasForDisciplina(_disciplina);
-                    if (_categoria == null || !nextCategorias.any((item) => item.value == _categoria)) {
-                      _categoria = null;
-                    }
                     if (!_isMobiliarios) {
                       _resetMobiliariosFields();
                     }
                     _updateIdActivoPreview();
                   });
+                  _subscribeCategorias();
                 },
               ),
               _buildDropdown(
@@ -301,6 +446,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                 categorias.map((item) => item.value).toList(),
                 (v) => setState(() => _categoria = v),
                 hintText: categorias.isEmpty ? 'Sin categorías disponibles' : 'Seleccione una categoría',
+                itemLabels: {for (final item in categorias) item.value: item.label},
               ),
               if (categorias.isEmpty)
                 const Padding(
@@ -311,13 +457,17 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                   ),
                 ),
               _buildTextField(
-                null,
+                _subcategoriaCtrl,
                 "Subcategoría (Escribir manual)",
+                hintText: _subcategoriaHint(_disciplina),
                 isManual: true,
-                onChanged: (val) => _subcategoria = val,
               ),
               _buildTextField(_marcaCtrl, "Marca"),
-              _buildTextField(_serieCtrl, "Serie"),
+              _buildTextField(
+                _serieCtrl,
+                "Serie",
+                hintText: _serieHint(_disciplina),
+              ),
               
               const SizedBox(height: 20),
               const Text("Ubicación", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
@@ -343,13 +493,47 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
               const SizedBox(height: 20),
               const Text("Datos del Activo", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               const SizedBox(height: 10),
+              CheckboxListTile(
+                value: _autoGenerarId,
+                onChanged: (value) {
+                  setState(() {
+                    _autoGenerarId = value ?? true;
+                    _idActivoError = null;
+                    _lastCheckedId = null;
+                    _lastCheckedUnique = null;
+                    if (_autoGenerarId) {
+                      _updateIdActivoPreview();
+                    }
+                  });
+                },
+                title: const Text('Autogenerar ID'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
               TextFormField(
                 controller: _idActivoCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'ID Activo (autogenerado)',
+                decoration: InputDecoration(
+                  labelText: _autoGenerarId ? 'ID Activo (autogenerado)' : 'ID Activo',
+                  errorText: _idActivoError,
+                  suffixIcon: _isCheckingId
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : null,
                 ),
-                readOnly: true,
-                enabled: false,
+                readOnly: _autoGenerarId,
+                enabled: true,
+                onChanged: _autoGenerarId
+                    ? null
+                    : (value) {
+                        setState(() => _idActivoError = null);
+                        _scheduleIdActivoCheck(value);
+                      },
               ),
               _buildTextField(_frecuenciaMantenimientoCtrl, "Frecuencia Mantenimiento (meses)", keyboardType: TextInputType.number),
               _buildTextField(_costoReemplazoCtrl, "Costo Reemplazo", keyboardType: TextInputType.number),
@@ -433,6 +617,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     bool isManual = false,
     Function(String)? onChanged,
     TextInputType? keyboardType,
+    String? hintText,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -448,8 +633,11 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
           }
         },
         keyboardType: keyboardType,
-        initialValue: isManual && ctrl == null ? _subcategoria : null,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hintText,
+          border: const OutlineInputBorder(),
+        ),
         validator: (v) => (v == null || v.isEmpty) && !isManual ? 'Campo requerido' : null,
       ),
     );
@@ -461,13 +649,19 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     List<String> items,
     Function(String?) onChanged, {
     String? hintText,
+    Map<String, String>? itemLabels,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
         value: value != null && items.contains(value) ? value : null,
         decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
-        items: items.map((e) => DropdownMenuItem(value: e, child: Text(_formatLabel(e)))).toList(),
+        items: items
+            .map((e) => DropdownMenuItem(
+                  value: e,
+                  child: Text(itemLabels?[e] ?? _formatLabel(e)),
+                ))
+            .toList(),
         hint: hintText != null ? Text(hintText) : null,
         onChanged: onChanged,
         validator: (val) {
@@ -483,18 +677,13 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     );
   }
 
-  List<CategoriaDisciplina> _categoriasForDisciplina(String disciplina) {
-    return categoriasPorDisciplina(disciplina.toLowerCase());
-  }
-
   bool get _isMobiliarios => _disciplina.toLowerCase() == 'mobiliarios';
 
   bool _isCategoriaValida() {
-    final categorias = _categoriasForDisciplina(_disciplina);
-    if (categorias.isEmpty) {
+    if (_categorias.isEmpty) {
       return false;
     }
-    return _categoria != null && categorias.any((item) => item.value == _categoria);
+    return _categoria != null && _categorias.any((item) => item.value == _categoria);
   }
 
   void _resetMobiliariosFields() {
@@ -508,6 +697,32 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     _observacionesCtrl.clear();
     _fechaAdquisicion = null;
     _fechaAdquisicionCustom = false;
+  }
+
+  String _subcategoriaHint(String disciplina) {
+    final key = disciplina.toLowerCase();
+    const hints = {
+      'electricas': 'Ej: luces_emergencia',
+      'sanitarias': 'Ej: grifos_lavamanos',
+      'estructuras': 'Ej: vigas_concreto',
+      'arquitectura': 'Ej: puertas_madera',
+      'mecanica': 'Ej: bombas_circulacion',
+      'mobiliarios': 'Ej: mesas_estudiante',
+    };
+    return hints[key] ?? 'Ej: subcategoria_equipo';
+  }
+
+  String _serieHint(String disciplina) {
+    final key = disciplina.toLowerCase();
+    const hints = {
+      'electricas': 'Ej: LE-2026-001',
+      'sanitarias': 'Ej: SA-2026-005',
+      'estructuras': 'Ej: ES-2026-007',
+      'arquitectura': 'Ej: AR-2026-012',
+      'mecanica': 'Ej: MC-2026-003',
+      'mobiliarios': 'Ej: ME-2026-010',
+    };
+    return hints[key] ?? 'Ej: EQ-2026-001';
   }
 
   List<Widget> _buildDynamicFields(List<SchemaField> fields) {
