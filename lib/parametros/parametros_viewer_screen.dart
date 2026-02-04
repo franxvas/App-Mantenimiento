@@ -410,6 +410,11 @@ class _ViewerContent extends StatelessWidget {
 
       final filename = _buildFilename();
       await exportExcelFile(bytes, filename);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Excel guardado correctamente.')),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al generar Excel: $e')),

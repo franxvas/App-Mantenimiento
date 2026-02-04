@@ -84,7 +84,7 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
                   _buildTextField(_nombreCtrl, "Ingrese nombre y apellido", required: true),
 
                   _buildInputLabel("DNI*"),
-                  _buildTextField(_dniCtrl, "Ingrese DNI (7 dígitos)", required: true, isNumber: true, exactLength: 7),
+                  _buildTextField(_dniCtrl, "Ingrese DNI (8 dígitos)", required: true, isNumber: true, exactLength: 8),
 
                   _buildInputLabel("Cargo*"),
                   _buildTextField(_cargoCtrl, "Ej: Técnico Electricista", required: true),

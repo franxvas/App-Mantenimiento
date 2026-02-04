@@ -294,6 +294,9 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
           if (required && (value == null || value.isEmpty)) {
             return 'Campo requerido';
           }
+          if (readOnly) {
+            return null;
+          }
           if (value == null || value.isEmpty) {
             return null;
           }

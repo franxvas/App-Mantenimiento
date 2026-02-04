@@ -3,22 +3,40 @@ import 'package:flutter/material.dart';
 import 'package:appmantflutter/shared/disciplinas_categorias.dart';
 
 // Flutter necesita IconData const para permitir tree shaking de fuentes.
-const Map<int, IconData> _materialIconsByCodePoint = {
-  0xe0f0: Icons.lightbulb,
-  0xf06b: Icons.smart_toy,
-  0xe8b8: Icons.flash_on,
-  0xe7ab: Icons.format_paint,
-  0xf1bb: Icons.door_front_door,
-  0xe8f1: Icons.view_column,
-  0xe5d4: Icons.cyclone,
-  0xe798: Icons.water_drop,
-  0xe9b1: Icons.chair,
-  0xf1b0: Icons.table_restaurant,
-  0xe6b4: Icons.inventory_2,
-  0xe869: Icons.build,
-  0xe902: Icons.construction,
-  0xe1db: Icons.storage,
-  0xe1bd: Icons.widgets,
+const Map<String, IconData> _materialIconsById = {
+  'lightbulb': Icons.lightbulb,
+  'smart_toy': Icons.smart_toy,
+  'flash_on': Icons.flash_on,
+  'format_paint': Icons.format_paint,
+  'door_front_door': Icons.door_front_door,
+  'view_column': Icons.view_column,
+  'cyclone': Icons.cyclone,
+  'water_drop': Icons.water_drop,
+  'chair': Icons.chair,
+  'table_restaurant': Icons.table_restaurant,
+  'inventory_2': Icons.inventory_2,
+  'build': Icons.build,
+  'construction': Icons.construction,
+  'storage': Icons.storage,
+  'widgets': Icons.widgets,
+};
+
+final Map<int, String> _materialIconIdByCodePoint = {
+  Icons.lightbulb.codePoint: 'lightbulb',
+  Icons.smart_toy.codePoint: 'smart_toy',
+  Icons.flash_on.codePoint: 'flash_on',
+  Icons.format_paint.codePoint: 'format_paint',
+  Icons.door_front_door.codePoint: 'door_front_door',
+  Icons.view_column.codePoint: 'view_column',
+  Icons.cyclone.codePoint: 'cyclone',
+  Icons.water_drop.codePoint: 'water_drop',
+  Icons.chair.codePoint: 'chair',
+  Icons.table_restaurant.codePoint: 'table_restaurant',
+  Icons.inventory_2.codePoint: 'inventory_2',
+  Icons.build.codePoint: 'build',
+  Icons.construction.codePoint: 'construction',
+  Icons.storage.codePoint: 'storage',
+  Icons.widgets.codePoint: 'widgets',
 };
 
 class CategoriaItem {
@@ -38,11 +56,14 @@ class CategoriaItem {
 
   factory CategoriaItem.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
-    final iconCodePoint = data['iconCodePoint'] as int?;
+    final iconId = data['iconId']?.toString();
+    final iconCodePoint = (data['iconCodePoint'] as num?)?.toInt();
     final iconFontFamily = data['iconFontFamily']?.toString() ?? 'MaterialIcons';
-    final iconData = iconCodePoint != null && iconFontFamily == 'MaterialIcons'
-        ? (_materialIconsByCodePoint[iconCodePoint] ?? Icons.category)
-        : Icons.category;
+    final resolvedId = iconId ??
+        (iconCodePoint != null && iconFontFamily == 'MaterialIcons'
+            ? _materialIconIdByCodePoint[iconCodePoint]
+            : null);
+    final iconData = resolvedId != null ? (_materialIconsById[resolvedId] ?? Icons.category) : Icons.category;
     return CategoriaItem(
       id: doc.id,
       disciplina: data['disciplina']?.toString() ?? '',
@@ -76,10 +97,12 @@ class CategoriasService {
     final batch = FirebaseFirestore.instance.batch();
     for (final item in defaults) {
       final doc = _collection.doc();
+      final iconId = _iconIdFromIconData(item.icon);
       batch.set(doc, {
         'disciplina': key,
         'value': item.value,
         'label': item.label,
+        if (iconId != null) 'iconId': iconId,
         'iconCodePoint': item.icon.codePoint,
         'iconFontFamily': item.icon.fontFamily,
         'iconFontPackage': item.icon.fontPackage,
@@ -149,10 +172,12 @@ class CategoriasService {
     required IconData icon,
   }) async {
     final key = disciplinaKey.toLowerCase().trim();
+    final iconId = _iconIdFromIconData(icon);
     await _collection.add({
       'disciplina': key,
       'value': value,
       'label': label,
+      if (iconId != null) 'iconId': iconId,
       'iconCodePoint': icon.codePoint,
       'iconFontFamily': icon.fontFamily,
       'iconFontPackage': icon.fontPackage,
@@ -166,8 +191,10 @@ class CategoriasService {
     required String label,
     required IconData icon,
   }) async {
+    final iconId = _iconIdFromIconData(icon);
     await _collection.doc(categoriaId).set({
       'label': label,
+      if (iconId != null) 'iconId': iconId,
       'iconCodePoint': icon.codePoint,
       'iconFontFamily': icon.fontFamily,
       'iconFontPackage': icon.fontPackage,
@@ -178,4 +205,11 @@ class CategoriasService {
   Future<void> deleteCategoria(String categoriaId) async {
     await _collection.doc(categoriaId).delete();
   }
+}
+
+String? _iconIdFromIconData(IconData icon) {
+  if (icon.fontFamily != 'MaterialIcons') {
+    return null;
+  }
+  return _materialIconIdByCodePoint[icon.codePoint];
 }
