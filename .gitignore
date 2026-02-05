@@ -49,5 +49,4 @@ node_modules/
 functions/node_modules/
 
 # Firebase secrets (mantén tu API en lib/)
-ios/Runner/GoogleService-Info.plist
 android/app/google-services.json
