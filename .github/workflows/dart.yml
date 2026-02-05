@@ -7,28 +7,54 @@ jobs:
   build-ios:
     name: 🎉 iOS Build
     runs-on: macos-latest
+
     steps:
-      - uses: actions/checkout@v3
-
-      - uses: subosito/flutter-action@v2
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          channel: 'stable'
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
           architecture: x64
-      - run: flutter pub get
-      
 
-      - run: pod repo update
-        working-directory: ios
+      - name: Flutter pub get
+        run: flutter pub get
 
-      - run: flutter build ios --release --no-codesign
+      # ✅ DEBUG + FAIL FAST
+      - name: Debug GoogleService-Info.plist
+        run: |
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "PWD=$(pwd)"
+          echo "Top-level:"
+          ls -la
+          echo "ios/Runner:"
+          ls -la ios/Runner || true
+          echo "Find plist:"
+          find . -maxdepth 5 -name "GoogleService-Info.plist" -print || true
+          echo "Test file:"
+          test -f ios/Runner/GoogleService-Info.plist && echo "✅ plist exists" || (echo "❌ plist missing" && exit 1)
 
-      - run: mkdir Payload
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Create Payload folder
+        run: mkdir -p Payload
         working-directory: build/ios/iphoneos
 
-      - run: mv Runner.app/ Payload
+      - name: Move Runner.app into Payload
+        run: mv Runner.app Payload/
         working-directory: build/ios/iphoneos
 
-      - name: Zip output
+      - name: Zip output (.ipa)
         run: zip -qq -r -9 FlutterIpaExport.ipa Payload
         working-directory: build/ios/iphoneos
 
