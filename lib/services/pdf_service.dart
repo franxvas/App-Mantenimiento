@@ -115,6 +115,8 @@ class PdfService {
         'N/A';
     final Map<String, dynamic> ubicacion = reporte['ubicacion'] ?? {};
     final String responsable = UsuariosCacheService.instance.resolveResponsableName(reporte);
+    final String? firmaUrl = UsuariosCacheService.instance.resolveResponsableFirmaUrl(reporte);
+    final Uint8List? firmaBytes = await _loadNetworkImageBytes(firmaUrl);
     final String tipoReporte = reporte['tipoReporte'] ?? reporte['tipo_reporte'] ?? 'General';
     final String tipoReporteLabel = _formatTitleCase(tipoReporte);
     final String estadoFinalLabel = _formatTitleCase(estadoNuevo);
@@ -257,6 +259,15 @@ class PdfService {
                 children: [
                   pw.Column(
                     children: [
+                      if (firmaBytes != null)
+                        pw.Container(
+                          width: 150,
+                          height: 60,
+                          alignment: pw.Alignment.center,
+                          child: pw.Image(pw.MemoryImage(firmaBytes), fit: pw.BoxFit.contain),
+                        )
+                      else
+                        pw.SizedBox(height: 60),
                       pw.Container(width: 150, height: 1, color: PdfColors.black),
                       pw.SizedBox(height: 5),
                       pw.Text("Firma del Encargado", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
@@ -303,6 +314,21 @@ class PdfService {
         ],
       ),
     );
+  }
+
+  static Future<Uint8List?> _loadNetworkImageBytes(String? url) async {
+    if (url == null || url.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        return response.bodyBytes;
+      }
+    } catch (e) {
+      print("ADVERTENCIA: Fallo al descargar firma para PDF ($e).");
+    }
+    return null;
   }
 
   static pw.Widget _buildPills(List<_PillData> items) {

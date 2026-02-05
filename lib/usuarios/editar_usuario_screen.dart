@@ -192,7 +192,7 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
                 const SizedBox(height: 20),
 
                 _buildTextField("Nombre y apellido", _nombreCtrl, readOnly: _isSaving, required: true),
-                _buildTextField("DNI", _dniCtrl, isNumber: true, readOnly: _isSaving, exactLength: 7, required: true),
+                _buildTextField("DNI", _dniCtrl, isNumber: true, readOnly: _isSaving, exactLength: 8, required: true),
                 _buildTextField("Cargo", _cargoCtrl, readOnly: _isSaving, required: true),
                 _buildTextField("Área", _areaCtrl, readOnly: _isSaving, required: false),
                 _buildTextField("Celular", _celularCtrl, isNumber: true, readOnly: _isSaving, exactLength: 9, required: false),
