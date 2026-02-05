@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:appmantflutter/services/audit_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,6 +23,10 @@ class _LoginScreenState extends State<LoginScreen> {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text.trim(),
+      );
+      await AuditService.logEvent(
+        action: 'auth.login',
+        message: 'inició sesión',
       );
       // No necesitamos navegar manualmente, el StreamBuilder en main.dart lo hará
     } on FirebaseAuthException catch (e) {

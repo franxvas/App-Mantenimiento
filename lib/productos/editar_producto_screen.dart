@@ -10,6 +10,7 @@ import 'package:appmantflutter/services/parametros_dataset_service.dart';
 import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
 import 'package:appmantflutter/services/activo_id_helper.dart';
+import 'package:appmantflutter/services/audit_service.dart';
 
 class EditarProductoScreen extends StatefulWidget {
   final String productId;
@@ -291,9 +292,9 @@ Future<String?> _uploadToSupabase() async {
         'modelo': _modeloController.text.trim(),
         'fechaAdquisicion': _fechaAdquisicion,
         'proveedor': _proveedorController.text.trim(),
-        'observaciones': _observacionesController.text.trim(),
       });
     }
+    productData['observaciones'] = _observacionesController.text.trim();
     if (newImageUrl != null && newImageUrl.isNotEmpty) {
       productData['imagenUrl'] = newImageUrl;
     }
@@ -305,6 +306,48 @@ Future<String?> _uploadToSupabase() async {
       disciplina: disciplinaKey,
       columns: columns,
     );
+
+    final effectiveData = Map<String, dynamic>.from(productData);
+    if (newImageUrl == null || newImageUrl.isEmpty) {
+      if (currentData.containsKey('imagenUrl')) {
+        effectiveData['imagenUrl'] = currentData['imagenUrl'];
+      }
+    }
+    final diff = _buildAuditDiff(currentData, effectiveData);
+
+    await AuditService.logEvent(
+      action: 'asset.update',
+      message: 'editó el activo ($idActivo)',
+      disciplina: disciplinaKey,
+      categoria: productData['categoria']?.toString() ?? productData['categoriaActivo']?.toString(),
+      productDocId: widget.productId,
+      idActivo: idActivo,
+      changes: diff.changedFields,
+      meta: diff.meta.isEmpty ? null : diff.meta,
+    );
+
+    if (diff.idRenamed) {
+      await AuditService.logEvent(
+        action: 'asset.id_renamed',
+        message: 'renombró ID: ${diff.idAntes} → ${diff.idDespues}',
+        disciplina: disciplinaKey,
+        categoria: productData['categoria']?.toString() ?? productData['categoriaActivo']?.toString(),
+        productDocId: widget.productId,
+        idActivo: idActivo,
+        meta: diff.idMeta,
+      );
+    }
+
+    if (diff.photoChanged) {
+      await AuditService.logEvent(
+        action: 'asset.photo_changed',
+        message: 'actualizó la foto del activo ($idActivo)',
+        disciplina: disciplinaKey,
+        categoria: productData['categoria']?.toString() ?? productData['categoriaActivo']?.toString(),
+        productDocId: widget.productId,
+        idActivo: idActivo,
+      );
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -377,6 +420,11 @@ Future<String?> _uploadToSupabase() async {
             _buildTextField(
               controller: _descripcionController,
               label: 'Descripción',
+              maxLines: 3,
+            ),
+            _buildTextField(
+              controller: _observacionesController,
+              label: 'Observaciones',
               maxLines: 3,
             ),
             _buildTextField(
@@ -545,11 +593,6 @@ Future<String?> _uploadToSupabase() async {
               _buildTextField(
                 controller: _proveedorController,
                 label: 'Proveedor',
-              ),
-              _buildTextField(
-                controller: _observacionesController,
-                label: 'Observaciones',
-                maxLines: 3,
               ),
             ],
 
@@ -782,4 +825,185 @@ Future<String?> _uploadToSupabase() async {
     };
     return hints[key] ?? 'Ej: EQ-2026-001';
   }
+
+  _AuditDiff _buildAuditDiff(Map<String, dynamic> before, Map<String, dynamic> after) {
+    const fields = [
+      'nombre',
+      'descripcion',
+      'marca',
+      'serie',
+      'subcategoria',
+      'disciplina',
+      'categoria',
+      'ubicacion.bloque',
+      'ubicacion.nivel',
+      'ubicacion.area',
+      'estadoOperativo',
+      'frecuenciaMantenimientoMeses',
+      'costoReemplazo',
+      'vidaUtilEsperadaAnios',
+      'fechaInstalacion',
+      'tipoMobiliario',
+      'materialPrincipal',
+      'usoIntensivo',
+      'movilidad',
+      'fabricante',
+      'modelo',
+      'fechaAdquisicion',
+      'proveedor',
+      'observaciones',
+      'imagenUrl',
+      'idActivo',
+    ];
+
+    final changedFields = <String>[];
+    final beforeMap = <String, dynamic>{};
+    final afterMap = <String, dynamic>{};
+
+    for (final field in fields) {
+      final beforeValue = _extractAuditValue(before, field);
+      final afterValue = _extractAuditValue(after, field);
+      if (!_auditEquals(beforeValue, afterValue)) {
+        changedFields.add(field);
+        beforeMap[field] = _formatAuditValue(beforeValue);
+        afterMap[field] = _formatAuditValue(afterValue);
+      }
+    }
+
+    final idAntes = _formatAuditValue(_extractAuditValue(before, 'idActivo'));
+    final idDespues = _formatAuditValue(_extractAuditValue(after, 'idActivo'));
+    final idRenamed = idAntes != idDespues && idDespues.isNotEmpty;
+
+    final photoChanged = (_extractAuditValue(after, 'imagenUrl') ?? '').toString().isNotEmpty &&
+        !_auditEquals(_extractAuditValue(before, 'imagenUrl'), _extractAuditValue(after, 'imagenUrl'));
+
+    final meta = <String, dynamic>{};
+    if (beforeMap.isNotEmpty) {
+      meta['before'] = beforeMap;
+      meta['after'] = afterMap;
+    }
+
+    return _AuditDiff(
+      changedFields: changedFields,
+      meta: meta,
+      idRenamed: idRenamed,
+      idAntes: idAntes,
+      idDespues: idDespues,
+      idMeta: idRenamed
+          ? {
+              'before': {'idActivo': idAntes},
+              'after': {'idActivo': idDespues},
+            }
+          : const <String, dynamic>{},
+      photoChanged: photoChanged,
+    );
+  }
+
+  dynamic _extractAuditValue(Map<String, dynamic> data, String field) {
+    final ubicacion = data['ubicacion'] as Map<String, dynamic>?;
+    final attrs = data['attrs'] as Map<String, dynamic>?;
+    switch (field) {
+      case 'nombre':
+        return data['nombre'] ?? data['nombreProducto'];
+      case 'descripcion':
+        return data['descripcion'];
+      case 'marca':
+        return data['marca'] ?? attrs?['marca'];
+      case 'serie':
+        return data['serie'] ?? attrs?['serie'];
+      case 'subcategoria':
+        return data['subcategoria'];
+      case 'disciplina':
+        return data['disciplina'];
+      case 'categoria':
+        return data['categoria'] ?? data['categoriaActivo'];
+      case 'ubicacion.bloque':
+        return ubicacion?['bloque'] ?? data['bloque'];
+      case 'ubicacion.nivel':
+        return ubicacion?['nivel'] ?? data['nivel'] ?? data['piso'];
+      case 'ubicacion.area':
+        return ubicacion?['area'] ?? data['espacio'] ?? data['area'];
+      case 'estadoOperativo':
+        return data['estadoOperativo'] ?? data['estado'];
+      case 'frecuenciaMantenimientoMeses':
+        return data['frecuenciaMantenimientoMeses'];
+      case 'costoReemplazo':
+        return data['costoReemplazo'];
+      case 'vidaUtilEsperadaAnios':
+        return data['vidaUtilEsperadaAnios'];
+      case 'fechaInstalacion':
+        return data['fechaInstalacion'];
+      case 'tipoMobiliario':
+        return data['tipoMobiliario'];
+      case 'materialPrincipal':
+        return data['materialPrincipal'];
+      case 'usoIntensivo':
+        return data['usoIntensivo'];
+      case 'movilidad':
+        return data['movilidad'];
+      case 'fabricante':
+        return data['fabricante'];
+      case 'modelo':
+        return data['modelo'];
+      case 'fechaAdquisicion':
+        return data['fechaAdquisicion'];
+      case 'proveedor':
+        return data['proveedor'];
+      case 'observaciones':
+        return data['observaciones'];
+      case 'imagenUrl':
+        return data['imagenUrl'];
+      case 'idActivo':
+        return data['idActivo'];
+      default:
+        return data[field];
+    }
+  }
+
+  bool _auditEquals(dynamic a, dynamic b) {
+    return _normalizeAuditValue(a) == _normalizeAuditValue(b);
+  }
+
+  String _normalizeAuditValue(dynamic value) {
+    if (value == null) return '';
+    if (value is Timestamp) return value.toDate().toIso8601String();
+    if (value is DateTime) return value.toIso8601String();
+    if (value is num) return value.toString();
+    if (value is bool) return value ? 'true' : 'false';
+    return value.toString().trim();
+  }
+
+  String _formatAuditValue(dynamic value) {
+    if (value == null) return '';
+    if (value is Timestamp) {
+      return DateFormat('dd/MM/yyyy').format(value.toDate());
+    }
+    if (value is DateTime) {
+      return DateFormat('dd/MM/yyyy').format(value);
+    }
+    if (value is bool) {
+      return value ? 'Sí' : 'No';
+    }
+    return value.toString();
+  }
+}
+
+class _AuditDiff {
+  final List<String> changedFields;
+  final Map<String, dynamic> meta;
+  final bool idRenamed;
+  final String idAntes;
+  final String idDespues;
+  final Map<String, dynamic> idMeta;
+  final bool photoChanged;
+
+  const _AuditDiff({
+    required this.changedFields,
+    required this.meta,
+    required this.idRenamed,
+    required this.idAntes,
+    required this.idDespues,
+    required this.idMeta,
+    required this.photoChanged,
+  });
 }

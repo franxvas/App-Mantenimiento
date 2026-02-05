@@ -13,6 +13,7 @@ import 'package:appmantflutter/usuarios/lista_usuarios_screen.dart';
 import 'package:appmantflutter/scan/qr_scanner_screen.dart'; // NUEVO: Import del Escáner
 import 'package:appmantflutter/dashboard/dashboard_screen.dart';
 import 'package:appmantflutter/parametros/parametros_screen.dart';
+import 'package:appmantflutter/auditoria/auditoria_screen.dart';
 
 // 1. PUNTO DE ENTRADA
 void main() async {
@@ -201,14 +202,7 @@ class MainMenuScreen extends StatelessWidget {
                             );
                           },
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.center,
-                      child: SizedBox(
-                        width: MediaQuery.of(context).size.width * 0.6,
-                        child: _MenuCard(
+                        _MenuCard(
                           title: "Usuarios",
                           icon: Icons.group_outlined,
                           onTap: () {
@@ -218,7 +212,17 @@ class MainMenuScreen extends StatelessWidget {
                             );
                           },
                         ),
-                      ),
+                        _MenuCard(
+                          title: "Auditoría",
+                          icon: Icons.history,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const AuditoriaScreen()),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 80),
                   ],

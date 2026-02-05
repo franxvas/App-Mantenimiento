@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/categorias_service.dart';
 import '../services/excel_export_service.dart';
 import '../services/usuarios_cache_service.dart';
+import '../services/audit_service.dart';
 import '../scan/qr_scanner_screen.dart';
 import '../shared/text_formatters.dart';
 import 'parametros_templates.dart';
@@ -113,6 +114,7 @@ class _BaseViewer extends StatelessWidget {
             return _ViewerContent(
               columns: columns,
               rows: rows,
+              disciplinaKey: disciplinaKey,
               disciplinaLabel: disciplinaLabel,
               tipo: 'base',
             );
@@ -238,6 +240,7 @@ class _ReportesViewer extends StatelessWidget {
                       return _ViewerContent(
                         columns: columns,
                         rows: rows,
+                        disciplinaKey: disciplinaKey,
                         disciplinaLabel: disciplinaLabel,
                         tipo: 'reportes',
                         footerBuilder: (context, onGenerateExcel) {
@@ -306,6 +309,7 @@ class _ReportesViewer extends StatelessWidget {
 class _ViewerContent extends StatelessWidget {
   final List<DatasetColumn> columns;
   final List<DatasetRow> rows;
+  final String disciplinaKey;
   final String disciplinaLabel;
   final String tipo;
   final Widget Function(BuildContext, Future<void> Function())? footerBuilder;
@@ -313,6 +317,7 @@ class _ViewerContent extends StatelessWidget {
   const _ViewerContent({
     required this.columns,
     required this.rows,
+    required this.disciplinaKey,
     required this.disciplinaLabel,
     required this.tipo,
     this.footerBuilder,
@@ -410,12 +415,30 @@ class _ViewerContent extends StatelessWidget {
 
       final filename = _buildFilename();
       await exportExcelFile(bytes, filename);
+      await AuditService.logEvent(
+        action: 'excel.export_success',
+        message: 'exportó EXCEL (${disciplinaKey}) ${tipo == 'base' ? 'base' : 'reportes'} OK',
+        disciplina: disciplinaKey,
+        meta: {
+          'filename': filename,
+          'tipo': tipo,
+        },
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Excel guardado correctamente.')),
         );
       }
     } catch (e) {
+      await AuditService.logEvent(
+        action: 'excel.export_failed',
+        message: 'falló exportación EXCEL (${disciplinaKey}): ${_shortError(e)}',
+        disciplina: disciplinaKey,
+        meta: {
+          'tipo': tipo,
+          'error': e.toString(),
+        },
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al generar Excel: $e')),
       );
@@ -494,6 +517,12 @@ class _ViewerContent extends StatelessWidget {
       return '${label}_Base_ES.xlsx';
     }
     return '${disciplinaLabel}_Reportes_ES.xlsx';
+  }
+
+  String _shortError(Object error) {
+    final raw = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (raw.length <= 120) return raw;
+    return '${raw.substring(0, 120)}...';
   }
 
   String _stringify(dynamic value) {

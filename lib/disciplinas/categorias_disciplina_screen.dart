@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:appmantflutter/productos/lista_productos_screen.dart';
 import 'package:appmantflutter/services/categorias_service.dart';
+import 'package:appmantflutter/services/audit_service.dart';
 import 'package:appmantflutter/shared/disciplinas_config.dart';
 import 'package:appmantflutter/shared/text_formatters.dart';
 
@@ -124,6 +125,18 @@ class _CategoriasDisciplinaScreenState extends State<CategoriasDisciplinaScreen>
     }
 
     await _categoriasService.deleteCategoria(item.id);
+    await AuditService.logEvent(
+      action: 'category.delete',
+      message: 'eliminó la categoría "${item.label}"',
+      disciplina: widget.disciplinaId,
+      categoria: item.value,
+      meta: {
+        'before': {
+          'label': item.label,
+          'icon': _iconLabel(item.icon),
+        },
+      },
+    );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Categoría "${item.label}" eliminada.')),
@@ -241,7 +254,7 @@ class _NuevaCategoriaTile extends StatelessWidget {
             Icon(Icons.add_circle_outline, color: Color(0xFF8B1E1E)),
             SizedBox(width: 12),
             Text(
-              '+ Nueva Categoría',
+              'Nueva Categoría',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
             ),
           ],
@@ -403,12 +416,59 @@ class _CategoriaEditorScreenState extends State<CategoriaEditorScreen> {
           label: label,
           icon: _selectedIcon,
         );
+        await AuditService.logEvent(
+          action: 'category.create',
+          message: 'creó la categoría "$label"',
+          disciplina: widget.disciplinaId,
+          categoria: value,
+          meta: {
+            'after': {
+              'label': label,
+              'icon': _iconLabel(_selectedIcon),
+            },
+          },
+        );
       } else {
+        final beforeLabel = widget.categoria!.label;
+        final beforeIcon = _iconLabel(widget.categoria!.icon);
+        final afterLabel = label;
+        final afterIcon = _iconLabel(_selectedIcon);
+        final changes = <String>[];
+        if (beforeLabel != afterLabel) {
+          changes.add('label');
+        }
+        if (beforeIcon != afterIcon) {
+          changes.add('icon');
+        }
         await _categoriasService.updateCategoria(
           categoriaId: widget.categoria!.id,
           label: label,
           icon: _selectedIcon,
         );
+        if (changes.isNotEmpty) {
+          final message = changes.length == 1 && changes.first == 'label'
+              ? 'renombró categoría: "$beforeLabel" → "$afterLabel"'
+              : changes.length == 1 && changes.first == 'icon'
+                  ? 'actualizó ícono de la categoría "$afterLabel"'
+                  : 'actualizó la categoría "$afterLabel"';
+          await AuditService.logEvent(
+            action: 'category.update',
+            message: message,
+            disciplina: widget.disciplinaId,
+            categoria: widget.categoria!.value,
+            changes: changes,
+            meta: {
+              'before': {
+                'label': beforeLabel,
+                'icon': beforeIcon,
+              },
+              'after': {
+                'label': afterLabel,
+                'icon': afterIcon,
+              },
+            },
+          );
+        }
       }
       if (mounted) {
         Navigator.pop(context);
@@ -444,3 +504,22 @@ const List<IconData> _categoriaIconOptions = [
   Icons.storage,
   Icons.widgets,
 ];
+
+String _iconLabel(IconData icon) {
+  if (icon == Icons.lightbulb) return 'lightbulb';
+  if (icon == Icons.smart_toy) return 'smart_toy';
+  if (icon == Icons.flash_on) return 'flash_on';
+  if (icon == Icons.format_paint) return 'format_paint';
+  if (icon == Icons.door_front_door) return 'door_front_door';
+  if (icon == Icons.view_column) return 'view_column';
+  if (icon == Icons.cyclone) return 'cyclone';
+  if (icon == Icons.water_drop) return 'water_drop';
+  if (icon == Icons.chair) return 'chair';
+  if (icon == Icons.table_restaurant) return 'table_restaurant';
+  if (icon == Icons.inventory_2) return 'inventory_2';
+  if (icon == Icons.build) return 'build';
+  if (icon == Icons.construction) return 'construction';
+  if (icon == Icons.storage) return 'storage';
+  if (icon == Icons.widgets) return 'widgets';
+  return 'icon_${icon.codePoint}';
+}

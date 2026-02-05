@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:appmantflutter/services/date_utils.dart';
 import 'package:appmantflutter/services/categorias_service.dart';
+import 'package:appmantflutter/services/audit_service.dart';
 
 class GenerarReporteScreen extends StatefulWidget {
   final String productId;
@@ -274,6 +275,17 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       }
 
       await productRef.update(updateData);
+
+      await AuditService.logEvent(
+        action: 'report.create',
+        message: 'creó reporte N° $reportNumber para activo ${productData['idActivo'] ?? widget.productId}',
+        disciplina: productData['disciplina']?.toString(),
+        categoria: productData['categoria']?.toString() ?? widget.productCategory,
+        productDocId: widget.productId,
+        idActivo: productData['idActivo']?.toString(),
+        reportId: reportRef.id,
+        reportNro: reportNumber,
+      );
 
       if (mounted) {
         Navigator.of(context).pop(); 

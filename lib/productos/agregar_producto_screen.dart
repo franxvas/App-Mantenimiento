@@ -9,6 +9,7 @@ import 'package:appmantflutter/services/parametros_schema_service.dart';
 import 'package:appmantflutter/services/schema_service.dart';
 import 'package:appmantflutter/services/activo_id_helper.dart';
 import 'package:appmantflutter/services/categorias_service.dart';
+import 'package:appmantflutter/services/audit_service.dart';
 import 'dart:async';
 
 class AgregarProductoScreen extends StatefulWidget {
@@ -292,6 +293,15 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         productData: productData,
         disciplina: _disciplina,
         columns: columns,
+      );
+
+      await AuditService.logEvent(
+        action: 'asset.create',
+        message: 'creó un nuevo activo ($idActivo)',
+        disciplina: disciplinaKey,
+        categoria: _categoria,
+        productDocId: productRef.id,
+        idActivo: idActivo,
       );
 
       if (mounted) {

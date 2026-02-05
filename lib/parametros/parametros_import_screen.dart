@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../services/parametros_import_service.dart';
+import '../services/audit_service.dart';
 
 class ParametrosImportScreen extends StatefulWidget {
   final String disciplinaKey;
@@ -91,7 +92,34 @@ class _ParametrosImportScreenState extends State<ParametrosImportScreen> {
         _result = result;
         _lastRunDry = dryRun;
       });
+
+      if (!dryRun) {
+        await AuditService.logEvent(
+          action: 'excel.import_success',
+          message: 'importó base EXCEL (${widget.disciplinaKey}) OK',
+          disciplina: widget.disciplinaKey,
+          meta: {
+            'fileName': _selectedFile!.name,
+            'created': result.created,
+            'updated': result.updated,
+            'skipped': result.skipped,
+            'totalRows': result.totalRows,
+            'categoriesCreated': result.categoriesCreated,
+          },
+        );
+      }
     } catch (e) {
+      if (!dryRun) {
+        await AuditService.logEvent(
+          action: 'excel.import_failed',
+          message: 'falló importación EXCEL (${widget.disciplinaKey}): ${_shortError(e)}',
+          disciplina: widget.disciplinaKey,
+          meta: {
+            'fileName': _selectedFile?.name,
+            'error': e.toString(),
+          },
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al importar: $e')),
@@ -213,6 +241,12 @@ class _ParametrosImportScreenState extends State<ParametrosImportScreen> {
       label = '$label (Dry-run)';
     }
     return label;
+  }
+
+  String _shortError(Object error) {
+    final raw = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (raw.length <= 120) return raw;
+    return '${raw.substring(0, 120)}...';
   }
 
   Widget _buildSummary(ImportResult result) {
