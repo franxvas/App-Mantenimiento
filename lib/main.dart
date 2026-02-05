@@ -139,88 +139,93 @@ class MainMenuScreen extends StatelessWidget {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat, // Centrado abajo
 
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _MenuCard(
-                      title: "Dashboard",
-                      icon: Icons.analytics_outlined,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const DashboardScreen()),
-                        );
-                      },
+                    GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        _MenuCard(
+                          title: "Dashboard",
+                          icon: Icons.analytics_outlined,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                            );
+                          },
+                        ),
+                        _MenuCard(
+                          title: "Disciplinas",
+                          icon: Icons.inventory_2_outlined,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const DisciplinasScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _MenuCard(
+                          title: "Reportes",
+                          icon: Icons.description_outlined,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ReportesScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _MenuCard(
+                          title: "Parámetros",
+                          icon: Icons.tune,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ParametrosScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
-                    _MenuCard(
-                      title: "Disciplinas",
-                      icon: Icons.inventory_2_outlined,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const DisciplinasScreen(),
-                          ),
-                        );
-                      },
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.center,
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width * 0.6,
+                        child: _MenuCard(
+                          title: "Usuarios",
+                          icon: Icons.group_outlined,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const ListaUsuariosScreen()),
+                            );
+                          },
+                        ),
+                      ),
                     ),
-                    _MenuCard(
-                      title: "Reportes",
-                      icon: Icons.description_outlined,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ReportesScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _MenuCard(
-                      title: "Parámetros",
-                      icon: Icons.tune,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ParametrosScreen(),
-                          ),
-                        );
-                      },
-                    ),
+                    const SizedBox(height: 80),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.center,
-                  child: SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.6,
-                    child: _MenuCard(
-                      title: "Usuarios",
-                      icon: Icons.group_outlined,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const ListaUsuariosScreen()),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 80),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );

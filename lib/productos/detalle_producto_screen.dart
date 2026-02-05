@@ -72,6 +72,11 @@ class DetalleProductoScreen extends StatelessWidget {
                           productId: productId,
                           ultimosReportes: listaReportes,
                         );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Ficha técnica guardada correctamente.')),
+                          );
+                        }
                       } catch (e) {
                         print("Error PDF: $e");
                         ScaffoldMessenger.of(context).showSnackBar(

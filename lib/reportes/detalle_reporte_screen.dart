@@ -93,6 +93,11 @@ class DetalleReporteScreen extends StatelessWidget {
                       reporte: data,
                       reportId: reportId,
                     );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Reporte guardado exitosamente.')),
+                      );
+                    }
                   } catch (e) {
                     print("Error PDF Reporte: $e");
                     ScaffoldMessenger.of(context).showSnackBar(
