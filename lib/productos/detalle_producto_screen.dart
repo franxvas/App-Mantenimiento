@@ -99,7 +99,16 @@ class DetalleProductoScreen extends StatelessWidget {
                             initialData: data,
                           ),
                         ),
-                      );
+                      ).then((value) {
+                        if (value is String && value.trim().isNotEmpty && value != productId) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DetalleProductoScreen(productId: value),
+                            ),
+                          );
+                        }
+                      });
                     },
                   ),
                 ],
@@ -128,8 +137,8 @@ class DetalleProductoScreen extends StatelessWidget {
           final Map<String, dynamic> ubicacion = data['ubicacion'] ?? {};
           final Map<String, dynamic> attrs = data['attrs'] ?? {};
           final String imageUrl = data['imagenUrl'] ?? ''; 
-          final String codigoQR = (data['codigoQR'] ?? attrs['codigoQR'] ?? '').toString(); 
-          final String estadoOperativo = (data['estadoOperativo'] ?? data['estado'] ?? 'operativo').toString().toLowerCase();
+          final String codigoQR = productId;
+          final String estadoOperativo = (data['estado'] ?? 'operativo').toString().toLowerCase();
 
           final Timestamp? tsInstalacion = data['fechaInstalacion'];
           final String fechaInstalacion = tsInstalacion != null
@@ -401,7 +410,7 @@ class DetalleProductoScreen extends StatelessWidget {
                   reportId: doc.id,
                   productId: productId,
                   tipoReporte: data['tipoReporte'] ?? data['tipo_reporte'] ?? 'General',
-                  estadoOperativo: data['estadoOperativo'] ?? data['estadoNuevo'] ?? data['estado'] ?? '',
+                  estadoOperativo: data['estadoNuevo'] ?? data['estado'] ?? '',
                   fecha: _resolveReportDate(data),
                 );
               }),

@@ -58,7 +58,7 @@ class PdfService {
               pw.SizedBox(height: 20),
               _buildPdfSection(
                 "Resumen del Activo",
-                _buildResumenActivo(producto, imageBytes, isMobiliarios),
+                _buildResumenActivo(producto, imageBytes, isMobiliarios, productId),
               ),
               if (isMobiliarios) ...[
                 pw.SizedBox(height: 10),
@@ -75,9 +75,7 @@ class PdfService {
         ),
       );
 
-      final idActivo = producto['idActivo']?.toString().trim();
-      final safeId = (idActivo == null || idActivo.isEmpty) ? productId : idActivo;
-      final filename = 'FichaTecnica_$safeId.pdf';
+      final filename = 'FichaTecnica_$productId.pdf';
       await saveFileBytes(
         bytes: await pdf.save(),
         filename: filename,
@@ -110,7 +108,7 @@ class PdfService {
     final String fecha = fechaEmision == null ? '--/--/----' : formatDateTimeDMYHM(fechaEmision);
     final String nombreEquipo = reporte['activo_nombre'] ?? reporte['activoNombre'] ?? 'N/A';
     final String estadoNuevo =
-        (reporte['estadoNuevo'] ?? reporte['estadoOperativo'] ?? reporte['estado_nuevo'] ?? reporte['estado'])
+        (reporte['estadoNuevo'] ?? reporte['estado_nuevo'] ?? reporte['estado'])
             ?.toString() ??
         'N/A';
     final Map<String, dynamic> ubicacion = reporte['ubicacion'] ?? {};
@@ -124,7 +122,6 @@ class PdfService {
     final String estadoDetectadoLabel = _formatTitleCase(reporte['estadoDetectado']?.toString() ?? '');
     final String estadoNuevoLabel = _formatTitleCase(
       reporte['estadoNuevo']?.toString() ??
-          reporte['estadoOperativo']?.toString() ??
           reporte['estado_nuevo']?.toString() ??
           reporte['estado']?.toString() ??
           '',
@@ -144,6 +141,17 @@ class PdfService {
     final String costoEstimado = _formatNumber(reporte['costoEstimado'] ?? reporte['costo']);
     final String disciplinaKey = reporte['disciplina']?.toString().toLowerCase() ?? '';
     final String? categoriaLabel = await _resolveCategoriaLabel(disciplinaKey, reporte['categoria']?.toString());
+    final List<String> fotosReporteUrls = (reporte['fotosReporte'] as List<dynamic>? ?? const <dynamic>[])
+        .map((item) => item.toString().trim())
+        .where((url) => url.isNotEmpty)
+        .toList(growable: false);
+    final List<Uint8List> fotosReporteBytes = [];
+    for (final url in fotosReporteUrls) {
+      final bytes = await _loadNetworkImageBytes(url);
+      if (bytes != null) {
+        fotosReporteBytes.add(bytes);
+      }
+    }
 
     try {
       pdf.addPage(
@@ -251,6 +259,12 @@ class PdfService {
                   )
                 )
               ),
+
+              if (fotosReporteBytes.isNotEmpty)
+                _buildPdfSection(
+                  "Evidencia Fotográfica",
+                  _buildReportPhotosGrid(fotosReporteBytes),
+                ),
               
               pw.SizedBox(height: 40),
               
@@ -366,7 +380,7 @@ class PdfService {
   }
 
   static pw.Widget _buildHeader(Map<String, dynamic> data, String id, String? categoriaLabel) {
-    final idActivo = data['idActivo']?.toString() ?? id;
+    final idActivo = id;
     final disciplina = _formatTitleCase(data['disciplina']?.toString() ?? '');
     final categoria = _formatTitleCase(categoriaLabel ?? data['categoria']?.toString() ?? '');
     final subcategoria = _formatTitleCase(data['subcategoria']?.toString() ?? '');
@@ -394,7 +408,7 @@ class PdfService {
           padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blue900), borderRadius: pw.BorderRadius.circular(4)),
           child: pw.Text(
-            _formatTitleCase((data['estadoOperativo'] ?? data['estado'])?.toString() ?? 'N/A'),
+            _formatTitleCase((data['estado'] ?? 'N/A')?.toString() ?? 'N/A'),
             style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
           ),
         ),
@@ -406,6 +420,7 @@ class PdfService {
     Map<String, dynamic> data,
     Uint8List? imageBytes,
     bool isMobiliarios,
+    String id,
   ) {
     final List<pw.Widget> leftColumn = [];
     void addInfo(String label, dynamic value, {bool formatTitle = false}) {
@@ -419,7 +434,7 @@ class PdfService {
     addInfo("Equipo:", data['nombre'] ?? data['nombreProducto']);
     addInfo("Marca:", data['marca']);
     addInfo("Serie:", data['serie']);
-    addInfo("Codigo QR:", data['codigoQR']);
+    addInfo("Codigo QR:", id);
     addInfo("Proveedor:", data['proveedor']);
     addInfo("Fabricante:", data['fabricante']);
     if (isMobiliarios) {
@@ -521,7 +536,7 @@ class PdfService {
         children: latest.map((reporte) {
           final tipoReporte = reporte['tipoReporte'] ?? reporte['tipo_reporte'] ?? 'General';
           final estadoAnterior = reporte['estadoAnterior'] ?? 'N/A';
-          final estadoOperativo = reporte['estadoOperativo'] ?? reporte['estadoNuevo'] ?? reporte['estado_nuevo'] ?? 'N/A';
+          final estadoOperativo = reporte['estadoNuevo'] ?? reporte['estado_nuevo'] ?? 'N/A';
           final tipoMantenimiento = reporte['tipoMantenimiento'];
           final fechaRaw = reporte['fechaInspeccion'] ?? reporte['fecha'];
           final fecha = _formatDateTime(fechaRaw);
@@ -667,6 +682,33 @@ class PdfService {
           ],
         )
       ],
+    );
+  }
+
+  static pw.Widget _buildReportPhotosGrid(List<Uint8List> images) {
+    return pw.Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: images
+          .map(
+            (bytes) => pw.Container(
+              width: 240,
+              height: 150,
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.ClipRRect(
+                horizontalRadius: 6,
+                verticalRadius: 6,
+                child: pw.Image(
+                  pw.MemoryImage(bytes),
+                  fit: pw.BoxFit.cover,
+                ),
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 

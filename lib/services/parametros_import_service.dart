@@ -1,12 +1,16 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:xml/xml.dart';
 
 import '../parametros/parametros_templates.dart';
 import '../shared/text_formatters.dart';
+import 'audit_service.dart';
 import 'categorias_service.dart';
 
 enum ImportAction { create, update, skip }
@@ -104,7 +108,7 @@ class ParametrosImportService {
     void Function(ImportProgress progress)? onProgress,
   }) async {
     onProgress?.call(ImportProgress(stage: ImportStage.reading, processed: 0, total: 0, dryRun: dryRun));
-    final excel = Excel.decodeBytes(bytes);
+    final tables = _readExcelTables(bytes);
 
     onProgress?.call(ImportProgress(stage: ImportStage.validating, processed: 0, total: 0, dryRun: dryRun));
 
@@ -118,14 +122,14 @@ class ParametrosImportService {
     final parsedRows = <_ParsedRow>[];
     final messages = <ImportMessage>[];
 
-    for (final entry in excel.tables.entries) {
+    for (final entry in tables.entries) {
       final sheetName = entry.key;
-      final sheet = entry.value;
-      if (sheet.rows.isEmpty) {
+      final rows = entry.value;
+      if (rows.isEmpty) {
         continue;
       }
 
-      final headerResult = _findHeaderRow(sheet.rows, expectedNormalized);
+      final headerResult = _findHeaderRow(rows, expectedNormalized);
       if (headerResult == null) {
         messages.add(
           ImportMessage(
@@ -157,8 +161,8 @@ class ParametrosImportService {
         }
       }
 
-      for (var rowIndex = headerRowIndex + 1; rowIndex < sheet.rows.length; rowIndex++) {
-        final row = sheet.rows[rowIndex];
+      for (var rowIndex = headerRowIndex + 1; rowIndex < rows.length; rowIndex++) {
+        final row = rows[rowIndex];
         final parsed = _parseRow(
           row,
           columnMap,
@@ -282,9 +286,7 @@ class ParametrosImportService {
       final ubicacionUpdates = <String, dynamic>{};
       final changedHeaders = <String>[];
 
-      final idChanged = _isDifferent(existingData['idActivo'], idActivo);
-      updateData['idActivo'] = idActivo;
-      if (idChanged || isCreate) {
+      if (isCreate) {
         _addChangedHeader(changedHeaders, _headerLabels[ImportField.idActivo]!);
       }
 
@@ -322,8 +324,11 @@ class ParametrosImportService {
       }
 
       if (isCreate) {
-        updateData['codigoQR'] = idActivo;
         updateData['fechaCreacion'] = FieldValue.serverTimestamp();
+        if (!updateData.containsKey('estado')) {
+          updateData['estado'] = 'operativo';
+          _addChangedHeader(changedHeaders, _headerLabels[ImportField.estadoOperativo]!);
+        }
       }
 
       if (!dryRun) {
@@ -335,6 +340,11 @@ class ParametrosImportService {
         if (fileName.trim().isNotEmpty) {
           updateData['importFileName'] = fileName.trim();
         }
+        updateData['idActivo'] = FieldValue.delete();
+        updateData['codigoQR'] = FieldValue.delete();
+        updateData['estadoOperativo'] = FieldValue.delete();
+        updateData['nombreProducto'] = FieldValue.delete();
+        updateData['tipoActivo'] = FieldValue.delete();
       }
 
       final action = isCreate ? ImportAction.create : ImportAction.update;
@@ -376,6 +386,16 @@ class ParametrosImportService {
             icon: Icons.category,
           );
           categoriesCreated += 1;
+          await AuditService.logEvent(
+            action: 'category.create',
+            message: 'creó la categoría "${categoria.label}" vía importar excel',
+            disciplina: disciplinaKey,
+            categoria: categoria.value,
+            meta: {
+              'source': 'excel.import',
+              if (fileName.trim().isNotEmpty) 'fileName': fileName.trim(),
+            },
+          );
         }
       }
     }
@@ -414,6 +434,11 @@ class _ParsedCell {
   final bool isEmpty;
 
   _ParsedCell({required this.value, required this.isEmpty});
+}
+
+class _CellValue {
+  final dynamic value;
+  const _CellValue(this.value);
 }
 
 class _HeaderResult {
@@ -480,31 +505,20 @@ enum ImportField {
   disciplina,
   categoriaActivo,
   tipoActivo,
+  marca,
+  modelo,
+  descripcionActivo,
   bloque,
   nivel,
   espacio,
+  tipoMantenimiento,
   estadoOperativo,
   condicionFisica,
   fechaUltimaInspeccion,
   nivelCriticidad,
-  impactoFalla,
   riesgoNormativo,
-  frecuenciaMantenimientoMeses,
-  fechaProximoMantenimiento,
-  costoMantenimiento,
-  costoReemplazo,
-  observaciones,
-  fechaInstalacion,
-  vidaUtilEsperadaAnios,
-  requiereReemplazo,
-  tipoMobiliario,
-  materialPrincipal,
-  usoIntensivo,
-  movilidad,
-  fabricante,
-  modelo,
-  fechaAdquisicion,
-  proveedor,
+  accionRecomendada,
+  costoEstimado,
 }
 
 enum _FieldType { text, number, date, boolean }
@@ -514,31 +528,20 @@ const Map<ImportField, String> _headerLabels = {
   ImportField.disciplina: 'Disciplina',
   ImportField.categoriaActivo: 'Categoria_Activo',
   ImportField.tipoActivo: 'Tipo_Activo',
+  ImportField.marca: 'Marca',
+  ImportField.modelo: 'Modelo',
+  ImportField.descripcionActivo: 'Descripcion_Activo',
   ImportField.bloque: 'Bloque',
   ImportField.nivel: 'Nivel',
   ImportField.espacio: 'Espacio',
+  ImportField.tipoMantenimiento: 'Tipo_Mantenimiento',
   ImportField.estadoOperativo: 'Estado_Operativo',
   ImportField.condicionFisica: 'Condicion_Fisica',
   ImportField.fechaUltimaInspeccion: 'Fecha_Ultima_Inspeccion',
   ImportField.nivelCriticidad: 'Nivel_Criticidad',
-  ImportField.impactoFalla: 'Impacto_Falla',
   ImportField.riesgoNormativo: 'Riesgo_Normativo',
-  ImportField.frecuenciaMantenimientoMeses: 'Frecuencia_Mantenimiento_Meses',
-  ImportField.fechaProximoMantenimiento: 'Fecha_Proximo_Mantenimiento',
-  ImportField.costoMantenimiento: 'Costo_Mantenimiento',
-  ImportField.costoReemplazo: 'Costo_Reemplazo',
-  ImportField.observaciones: 'Observaciones',
-  ImportField.fechaInstalacion: 'Fecha_Instalacion',
-  ImportField.vidaUtilEsperadaAnios: 'Vida_Util_Esperada_Anios',
-  ImportField.requiereReemplazo: 'Requiere_Reemplazo',
-  ImportField.tipoMobiliario: 'Tipo_Mobiliario',
-  ImportField.materialPrincipal: 'Material_Principal',
-  ImportField.usoIntensivo: 'Uso_Intensivo',
-  ImportField.movilidad: 'Movilidad',
-  ImportField.fabricante: 'Fabricante',
-  ImportField.modelo: 'Modelo',
-  ImportField.fechaAdquisicion: 'Fecha_Adquisicion',
-  ImportField.proveedor: 'Proveedor',
+  ImportField.accionRecomendada: 'Accion_Recomendada',
+  ImportField.costoEstimado: 'Costo_Estimado',
 };
 
 const Map<ImportField, _FieldType> _fieldTypes = {
@@ -546,42 +549,31 @@ const Map<ImportField, _FieldType> _fieldTypes = {
   ImportField.disciplina: _FieldType.text,
   ImportField.categoriaActivo: _FieldType.text,
   ImportField.tipoActivo: _FieldType.text,
+  ImportField.marca: _FieldType.text,
+  ImportField.modelo: _FieldType.text,
+  ImportField.descripcionActivo: _FieldType.text,
   ImportField.bloque: _FieldType.text,
   ImportField.nivel: _FieldType.text,
   ImportField.espacio: _FieldType.text,
+  ImportField.tipoMantenimiento: _FieldType.text,
   ImportField.estadoOperativo: _FieldType.text,
   ImportField.condicionFisica: _FieldType.text,
   ImportField.fechaUltimaInspeccion: _FieldType.date,
   ImportField.nivelCriticidad: _FieldType.text,
-  ImportField.impactoFalla: _FieldType.text,
   ImportField.riesgoNormativo: _FieldType.text,
-  ImportField.frecuenciaMantenimientoMeses: _FieldType.number,
-  ImportField.fechaProximoMantenimiento: _FieldType.date,
-  ImportField.costoMantenimiento: _FieldType.number,
-  ImportField.costoReemplazo: _FieldType.number,
-  ImportField.observaciones: _FieldType.text,
-  ImportField.fechaInstalacion: _FieldType.date,
-  ImportField.vidaUtilEsperadaAnios: _FieldType.number,
-  ImportField.requiereReemplazo: _FieldType.boolean,
-  ImportField.tipoMobiliario: _FieldType.text,
-  ImportField.materialPrincipal: _FieldType.text,
-  ImportField.usoIntensivo: _FieldType.text,
-  ImportField.movilidad: _FieldType.text,
-  ImportField.fabricante: _FieldType.text,
-  ImportField.modelo: _FieldType.text,
-  ImportField.fechaAdquisicion: _FieldType.date,
-  ImportField.proveedor: _FieldType.text,
+  ImportField.accionRecomendada: _FieldType.text,
+  ImportField.costoEstimado: _FieldType.number,
 };
 
 final Map<String, ImportField> _headerLookup = {
   for (final entry in _headerLabels.entries) _normalizeToken(entry.value): entry.key,
+  _normalizeToken('Descripcion'): ImportField.descripcionActivo,
+  _normalizeToken('Estado_Detectado'): ImportField.estadoOperativo,
 };
 
 final Map<ImportField, List<_TargetField>> _targets = {
   ImportField.tipoActivo: const [
     _TargetField('nombre'),
-    _TargetField('nombreProducto'),
-    _TargetField('tipoActivo'),
   ],
   ImportField.bloque: const [
     _TargetField('bloque'),
@@ -596,19 +588,21 @@ final Map<ImportField, List<_TargetField>> _targets = {
     _TargetField('area', isUbicacion: true),
   ],
   ImportField.estadoOperativo: const [
-    _TargetField('estadoOperativo'),
     _TargetField('estado'),
+  ],
+  ImportField.descripcionActivo: const [
+    _TargetField('descripcion'),
   ],
 };
 
-_HeaderResult? _findHeaderRow(List<List<Data?>> rows, Set<String> expectedNormalized) {
+_HeaderResult? _findHeaderRow(List<List<_CellValue>> rows, Set<String> expectedNormalized) {
   for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
     final row = rows[rowIndex];
     final columnMap = <int, ImportField>{};
     final foundHeaders = <String>{};
 
     for (var colIndex = 0; colIndex < row.length; colIndex++) {
-      final cellValue = _stringifyCell(row[colIndex]?.value);
+      final cellValue = _stringifyCell(row[colIndex].value);
       if (cellValue.isEmpty) {
         continue;
       }
@@ -637,7 +631,7 @@ _HeaderResult? _findHeaderRow(List<List<Data?>> rows, Set<String> expectedNormal
 }
 
 _ParsedRow? _parseRow(
-  List<Data?> row,
+  List<_CellValue> row,
   Map<int, ImportField> columnMap, {
   required String sheetName,
   required int rowNumber,
@@ -655,7 +649,7 @@ _ParsedRow? _parseRow(
     }
     final field = entry.value;
     final cell = row[colIndex];
-    final parsed = _parseCell(field, cell?.value);
+    final parsed = _parseCell(field, cell.value);
     cells[field] = parsed;
     if (!parsed.isEmpty) {
       hasValue = true;
@@ -736,56 +730,34 @@ String _fieldKeyFor(ImportField field) {
       return 'categoriaActivo';
     case ImportField.tipoActivo:
       return 'nombre';
+    case ImportField.marca:
+      return 'marca';
+    case ImportField.modelo:
+      return 'modelo';
+    case ImportField.descripcionActivo:
+      return 'descripcion';
     case ImportField.bloque:
       return 'bloque';
     case ImportField.nivel:
       return 'nivel';
     case ImportField.espacio:
       return 'espacio';
+    case ImportField.tipoMantenimiento:
+      return 'tipoMantenimiento';
     case ImportField.estadoOperativo:
-      return 'estadoOperativo';
+      return 'estado';
     case ImportField.condicionFisica:
       return 'condicionFisica';
     case ImportField.fechaUltimaInspeccion:
       return 'fechaUltimaInspeccion';
     case ImportField.nivelCriticidad:
       return 'nivelCriticidad';
-    case ImportField.impactoFalla:
-      return 'impactoFalla';
     case ImportField.riesgoNormativo:
       return 'riesgoNormativo';
-    case ImportField.frecuenciaMantenimientoMeses:
-      return 'frecuenciaMantenimientoMeses';
-    case ImportField.fechaProximoMantenimiento:
-      return 'fechaProximoMantenimiento';
-    case ImportField.costoMantenimiento:
-      return 'costoMantenimiento';
-    case ImportField.costoReemplazo:
-      return 'costoReemplazo';
-    case ImportField.observaciones:
-      return 'observaciones';
-    case ImportField.fechaInstalacion:
-      return 'fechaInstalacion';
-    case ImportField.vidaUtilEsperadaAnios:
-      return 'vidaUtilEsperadaAnios';
-    case ImportField.requiereReemplazo:
-      return 'requiereReemplazo';
-    case ImportField.tipoMobiliario:
-      return 'tipoMobiliario';
-    case ImportField.materialPrincipal:
-      return 'materialPrincipal';
-    case ImportField.usoIntensivo:
-      return 'usoIntensivo';
-    case ImportField.movilidad:
-      return 'movilidad';
-    case ImportField.fabricante:
-      return 'fabricante';
-    case ImportField.modelo:
-      return 'modelo';
-    case ImportField.fechaAdquisicion:
-      return 'fechaAdquisicion';
-    case ImportField.proveedor:
-      return 'proveedor';
+    case ImportField.accionRecomendada:
+      return 'accionRecomendada';
+    case ImportField.costoEstimado:
+      return 'costoEstimado';
   }
 }
 
@@ -806,7 +778,11 @@ _ParsedCell _parseCell(ImportField field, dynamic rawValue) {
       return _ParsedCell(value: parsed ?? rawValue.toString().trim(), isEmpty: false);
     case _FieldType.text:
     default:
-      return _ParsedCell(value: rawValue.toString().trim(), isEmpty: false);
+      final textValue = rawValue.toString().trim();
+      if (field == ImportField.estadoOperativo) {
+        return _ParsedCell(value: _normalizeEstadoOperativo(textValue), isEmpty: false);
+      }
+      return _ParsedCell(value: textValue, isEmpty: false);
   }
 }
 
@@ -974,6 +950,15 @@ bool _isDifferent(dynamic existing, dynamic next) {
   return existing.toString().trim() != next.toString().trim();
 }
 
+String _normalizeEstadoOperativo(String value) {
+  final normalized = value.trim().toLowerCase();
+  if (normalized.isEmpty) return '';
+  if (normalized.contains('fuera') && normalized.contains('servicio')) {
+    return 'fuera de servicio';
+  }
+  return normalized;
+}
+
 dynamic _emptyValueFor(_FieldType type) {
   switch (type) {
     case _FieldType.text:
@@ -1057,4 +1042,172 @@ bool? _parseBool(dynamic value) {
     }
   }
   return null;
+}
+
+Map<String, List<List<_CellValue>>> _readExcelTables(Uint8List bytes) {
+  try {
+    final excel = Excel.decodeBytes(bytes);
+    final tables = <String, List<List<_CellValue>>>{};
+    for (final entry in excel.tables.entries) {
+      final sheet = entry.value;
+      final rows = sheet.rows
+          .map((row) => row.map((cell) => _CellValue(cell?.value)).toList())
+          .toList(growable: false);
+      tables[entry.key] = rows;
+    }
+    return tables;
+  } catch (_) {
+    final repaired = _repairStylesXml(bytes) ?? bytes;
+    return _readTablesFromXml(repaired);
+  }
+}
+
+Uint8List? _repairStylesXml(Uint8List bytes) {
+  try {
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final repaired = Archive();
+    var stylesFound = false;
+    for (final file in archive) {
+      if (file.isFile && file.name == 'xl/styles.xml') {
+        final data = utf8.encode(_minimalStylesXml);
+        repaired.addFile(ArchiveFile(file.name, data.length, data));
+        stylesFound = true;
+      } else {
+        repaired.addFile(file);
+      }
+    }
+    if (!stylesFound) {
+      final data = utf8.encode(_minimalStylesXml);
+      repaired.addFile(ArchiveFile('xl/styles.xml', data.length, data));
+    }
+    final encoded = ZipEncoder().encode(repaired);
+    if (encoded == null) return null;
+    return Uint8List.fromList(encoded);
+  } catch (_) {
+    return null;
+  }
+}
+
+const String _minimalStylesXml =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    '<fonts count="1"><font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font></fonts>'
+    '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+    '<dxfs count="0"/>'
+    '<tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleLight16"/>'
+    '</styleSheet>';
+
+Map<String, List<List<_CellValue>>> _readTablesFromXml(Uint8List bytes) {
+  final archive = ZipDecoder().decodeBytes(bytes);
+  final files = <String, ArchiveFile>{};
+  for (final file in archive) {
+    files[file.name] = file;
+  }
+
+  final sharedStrings = _readSharedStrings(files['xl/sharedStrings.xml']);
+  final workbookDoc = _readXml(files['xl/workbook.xml']);
+  final relsDoc = _readXml(files['xl/_rels/workbook.xml.rels']);
+
+  final rels = <String, String>{};
+  if (relsDoc != null) {
+    for (final rel in relsDoc.findAllElements('Relationship')) {
+      final id = rel.getAttribute('Id');
+      final target = rel.getAttribute('Target');
+      if (id != null && target != null) {
+        rels[id] = 'xl/$target';
+      }
+    }
+  }
+
+  final tables = <String, List<List<_CellValue>>>{};
+  if (workbookDoc == null) return tables;
+
+  for (final sheet in workbookDoc.findAllElements('sheet')) {
+    final name = sheet.getAttribute('name') ?? 'Sheet';
+    final relId = sheet.getAttribute('r:id');
+    if (relId == null) continue;
+    final target = rels[relId];
+    if (target == null) continue;
+    final sheetDoc = _readXml(files[target]);
+    if (sheetDoc == null) continue;
+    tables[name] = _readSheetRows(sheetDoc, sharedStrings);
+  }
+  return tables;
+}
+
+XmlDocument? _readXml(ArchiveFile? file) {
+  if (file == null) return null;
+  try {
+    final content = utf8.decode(file.content as List<int>);
+    return XmlDocument.parse(content);
+  } catch (_) {
+    return null;
+  }
+}
+
+List<String> _readSharedStrings(ArchiveFile? file) {
+  final doc = _readXml(file);
+  if (doc == null) return const [];
+  final strings = <String>[];
+  for (final si in doc.findAllElements('si')) {
+    final texts = si.findAllElements('t').map((t) => t.text).toList();
+    strings.add(texts.join());
+  }
+  return strings;
+}
+
+List<List<_CellValue>> _readSheetRows(XmlDocument doc, List<String> sharedStrings) {
+  final rows = <List<_CellValue>>[];
+  final sheetData = doc.findAllElements('sheetData');
+  if (sheetData.isEmpty) return rows;
+
+  for (final row in sheetData.first.findAllElements('row')) {
+    final cellMap = <int, _CellValue>{};
+    var maxCol = -1;
+    for (final cell in row.findAllElements('c')) {
+      final ref = cell.getAttribute('r') ?? '';
+      final colLetters = RegExp(r'[A-Z]+').firstMatch(ref)?.group(0) ?? '';
+      if (colLetters.isEmpty) continue;
+      final col = _columnIndexFromLetters(colLetters);
+      maxCol = col > maxCol ? col : maxCol;
+      final type = cell.getAttribute('t');
+      dynamic value;
+      if (type == 's') {
+        final v = cell.getElement('v')?.text ?? '';
+        final idx = int.tryParse(v) ?? -1;
+        value = (idx >= 0 && idx < sharedStrings.length) ? sharedStrings[idx] : '';
+      } else if (type == 'inlineStr') {
+        final texts = cell.findAllElements('t').map((t) => t.text).toList();
+        value = texts.join();
+      } else if (type == 'b') {
+        final v = cell.getElement('v')?.text ?? '';
+        value = v == '1';
+      } else {
+        final v = cell.getElement('v')?.text ?? '';
+        final parsed = double.tryParse(v);
+        value = parsed ?? v;
+      }
+      cellMap[col] = _CellValue(value);
+    }
+    final rowList = List<_CellValue>.generate(
+      maxCol + 1,
+      (index) => cellMap[index] ?? const _CellValue(null),
+    );
+    rows.add(rowList);
+  }
+  return rows;
+}
+
+int _columnIndexFromLetters(String letters) {
+  var index = 0;
+  for (var i = 0; i < letters.length; i++) {
+    final code = letters.codeUnitAt(i) - 64;
+    if (code < 1 || code > 26) continue;
+    index = index * 26 + code;
+  }
+  return index - 1;
 }

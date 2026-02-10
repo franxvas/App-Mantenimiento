@@ -60,7 +60,7 @@ class DetalleReporteScreen extends StatelessWidget {
             }
 
             final data = snapshot.data!.data() ?? <String, dynamic>{};
-            final String estado = data['estadoOperativo'] ??
+            final String estado = data['estadoNuevo'] ??
                 data['estadoDetectado'] ??
                 data['estado_nuevo'] ??
                 data['estado'] ??
@@ -260,7 +260,7 @@ class DetalleReporteScreen extends StatelessWidget {
       _DetailField(label: "Área", value: _formatDisplayValue(ubicacion['area'])),
       _DetailField(label: "Estado anterior", value: _formatDisplayValue(data['estadoAnterior'])),
       _DetailField(label: "Estado detectado", value: _formatDisplayValue(data['estadoDetectado'])),
-      _DetailField(label: "Estado nuevo", value: _formatDisplayValue(data['estadoNuevo'] ?? data['estadoOperativo'] ?? data['estado'])),
+      _DetailField(label: "Estado nuevo", value: _formatDisplayValue(data['estadoNuevo'] ?? data['estado'])),
       _DetailField(label: "Condición física", value: _formatDisplayValue(data['condicionFisica'])),
       _DetailField(label: "Tipo mantenimiento", value: _formatDisplayValue(data['tipoMantenimiento'])),
       _DetailField(label: "Nivel criticidad", value: _formatDisplayValue(data['nivelCriticidad'])),

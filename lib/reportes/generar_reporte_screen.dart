@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:appmantflutter/services/date_utils.dart';
 import 'package:appmantflutter/services/categorias_service.dart';
 import 'package:appmantflutter/services/audit_service.dart';
+import 'dart:io';
 
 class GenerarReporteScreen extends StatefulWidget {
   final String productId;
@@ -52,6 +55,8 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
   
   bool _isSaving = false; 
   String _disciplinaKey = '';
+  final ImagePicker _imagePicker = ImagePicker();
+  final List<File> _evidenciaFiles = [];
 
   @override
   void initState() {
@@ -198,11 +203,10 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
       final bool esReemplazo = _isReemplazo;
       final String nuevoEstadoFinal = esReemplazo ? 'operativo' : _nuevoEstado.toLowerCase();
       final reportRef = productRef.collection('reportes').doc();
+      final evidenciaUrls = await _uploadEvidencePhotos(reportRef.id);
       final reportData = <String, dynamic>{
         'nro': reportNumber,
         'productId': widget.productId,
-        'codigoQR': productData['codigoQR'],
-        'nombreProducto': productData['nombreProducto'] ?? widget.productName,
         'activo_nombre': widget.productName,
         'activoNombre': widget.productName,
         'disciplina': productData['disciplina'],
@@ -218,6 +222,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         'fechaDisplay': DateFormat('dd/MM/yyyy').format(_fechaInspeccion),
         'ubicacion': widget.productLocation,
         'createdAt': FieldValue.serverTimestamp(),
+        if (evidenciaUrls.isNotEmpty) 'fotosReporte': evidenciaUrls,
       };
 
       reportData.addAll({
@@ -226,7 +231,6 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         'comentarios': _comentariosCtrl.text.trim(),
         'estadoAnterior': widget.initialStatus.toLowerCase(),
         'estadoNuevo': nuevoEstadoFinal,
-        'estadoOperativo': nuevoEstadoFinal,
         'condicionFisica': _condicionFisica,
         'tipoMantenimiento': _showTipoMantenimiento ? _tipoMantenimiento : null,
         'nivelCriticidad': _nivelCriticidad,
@@ -258,11 +262,8 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
 
       updateData.addAll({
         'estado': nuevoEstadoFinal,
-        'estadoOperativo': nuevoEstadoFinal,
         'condicionFisica': _condicionFisica,
-        'tipoMantenimiento': _showTipoMantenimiento ? _tipoMantenimiento : null,
         'nivelCriticidad': _nivelCriticidad,
-        'impactoFalla': _impactoFalla,
         'riesgoNormativo': _riesgoNormativo,
         'requiereReemplazo': _showRequiereReemplazo ? _requiereReemplazo : false,
       });
@@ -278,11 +279,11 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
 
       await AuditService.logEvent(
         action: 'report.create',
-        message: 'creó reporte N° $reportNumber para activo ${productData['idActivo'] ?? widget.productId}',
+        message: 'creó reporte N° $reportNumber para activo ${widget.productId}',
         disciplina: productData['disciplina']?.toString(),
         categoria: productData['categoria']?.toString() ?? widget.productCategory,
         productDocId: widget.productId,
-        idActivo: productData['idActivo']?.toString(),
+        idActivo: widget.productId,
         reportId: reportRef.id,
         reportNro: reportNumber,
       );
@@ -303,6 +304,43 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
         );
       }
     }
+  }
+
+  Future<void> _pickEvidencePhotos() async {
+    try {
+      final picked = await _imagePicker.pickMultiImage(imageQuality: 80);
+      if (picked.isEmpty) return;
+      if (!mounted) return;
+      setState(() {
+        for (final xfile in picked) {
+          _evidenciaFiles.add(File(xfile.path));
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al seleccionar fotos: $e')),
+      );
+    }
+  }
+
+  void _removeEvidenceAt(int index) {
+    if (index < 0 || index >= _evidenciaFiles.length) return;
+    setState(() => _evidenciaFiles.removeAt(index));
+  }
+
+  Future<List<String>> _uploadEvidencePhotos(String reportId) async {
+    if (_evidenciaFiles.isEmpty) return const <String>[];
+    final supabase = Supabase.instance.client;
+    final urls = <String>[];
+    for (final file in _evidenciaFiles) {
+      final ext = file.path.contains('.') ? file.path.split('.').last : 'jpg';
+      final fileName = 'reportes/$reportId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await supabase.storage.from('AppMant').upload(fileName, file);
+      final publicUrl = supabase.storage.from('AppMant').getPublicUrl(fileName);
+      urls.add(publicUrl);
+    }
+    return urls;
   }
 
   @override
@@ -450,6 +488,9 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
               maxLines: 3,
               isRequired: false,
             ),
+
+            const SizedBox(height: 8),
+            _buildEvidenceSection(),
             
             const SizedBox(height: 30),
             
@@ -699,6 +740,63 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildEvidenceSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Fotos de Evidencia",
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _isSaving ? null : _pickEvidencePhotos,
+          icon: const Icon(Icons.photo_library_outlined),
+          label: const Text("Agregar fotos"),
+        ),
+        if (_evidenciaFiles.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: List.generate(_evidenciaFiles.length, (index) {
+              final file = _evidenciaFiles[index];
+              return Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(
+                      file,
+                      width: 90,
+                      height: 90,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: _isSaving ? null : () => _removeEvidenceAt(index),
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(3),
+                        child: const Icon(Icons.close, color: Colors.white, size: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }),
+          ),
+        ],
+        const SizedBox(height: 8),
+      ],
     );
   }
 

@@ -1,207 +1,52 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:appmantflutter/services/date_utils.dart';
+
 import 'package:appmantflutter/services/usuarios_cache_service.dart';
 
-const Map<String, Map<String, List<String>>> parametrosHeaders = {
-  'electricas': {
-    'base': [
-      'ID_Activo',
-      'Disciplina',
-      'Categoria_Activo',
-      'Tipo_Activo',
-      'Bloque',
-      'Nivel',
-      'Espacio',
-      'Estado_Operativo',
-      'Condicion_Fisica',
-      'Fecha_Ultima_Inspeccion',
-      'Nivel_Criticidad',
-      'Impacto_Falla',
-      'Riesgo_Normativo',
-      'Frecuencia_Mantenimiento_Meses',
-      'Fecha_Proximo_Mantenimiento',
-      'Costo_Mantenimiento',
-      'Costo_Reemplazo',
-      'Observaciones',
-    ],
-    'reportes': [
-      'ID_Reporte',
-      'ID_Activo',
-      'Disciplina',
-      'Fecha_Inspeccion',
-      'Estado_Detectado',
-      'Riesgo_Electrico',
-      'Accion_Recomendada',
-      'Costo_Estimado',
-      'Responsable',
-    ],
-  },
-  'sanitarias': {
-    'base': [
-      'ID_Activo',
-      'Disciplina',
-      'Categoria_Activo',
-      'Tipo_Activo',
-      'Bloque',
-      'Nivel',
-      'Espacio',
-      'Estado_Operativo',
-      'Condicion_Fisica',
-      'Fecha_Ultima_Inspeccion',
-      'Nivel_Criticidad',
-      'Impacto_Falla',
-      'Riesgo_Normativo',
-      'Frecuencia_Mantenimiento_Meses',
-      'Fecha_Proximo_Mantenimiento',
-      'Costo_Mantenimiento',
-      'Observaciones',
-    ],
-    'reportes': [
-      'ID_Reporte',
-      'ID_Activo',
-      'Disciplina',
-      'Fecha_Inspeccion',
-      'Estado_Detectado',
-      'Riesgo_Sanitario',
-      'Accion_Recomendada',
-      'Costo_Estimado',
-      'Responsable',
-    ],
-  },
-  'arquitectura': {
-    'base': [
-      'ID_Activo',
-      'Disciplina',
-      'Categoria_Activo',
-      'Tipo_Activo',
-      'Bloque',
-      'Nivel',
-      'Espacio',
-      'Estado_Operativo',
-      'Condicion_Fisica',
-      'Fecha_Ultima_Inspeccion',
-      'Nivel_Criticidad',
-      'Fecha_Instalacion',
-      'Vida_Util_Esperada_Anios',
-      'Costo_Mantenimiento',
-      'Observaciones',
-    ],
-    'reportes': [
-      'ID_Reporte',
-      'ID_Activo',
-      'Disciplina',
-      'Fecha_Inspeccion',
-      'Estado_Detectado',
-      'Accion_Recomendada',
-      'Costo_Estimado',
-      'Responsable',
-    ],
-  },
-  'estructuras': {
-    'base': [
-      'ID_Activo',
-      'Disciplina',
-      'Categoria_Activo',
-      'Tipo_Activo',
-      'Bloque',
-      'Nivel',
-      'Espacio',
-      'Estado_Operativo',
-      'Condicion_Fisica',
-      'Fecha_Ultima_Inspeccion',
-      'Nivel_Criticidad',
-      'Fecha_Instalacion',
-      'Vida_Util_Esperada_Anios',
-      'Requiere_Reemplazo',
-      'Costo_Reemplazo',
-      'Observaciones',
-    ],
-    'reportes': [
-      'ID_Reporte',
-      'ID_Activo',
-      'Disciplina',
-      'Fecha_Inspeccion',
-      'Estado_Detectado',
-      'Accion_Recomendada',
-      'Costo_Estimado',
-      'Responsable',
-    ],
-  },
-  'mecanica': {
-    'base': [
-      'ID_Activo',
-      'Disciplina',
-      'Categoria_Activo',
-      'Tipo_Activo',
-      'Bloque',
-      'Nivel',
-      'Espacio',
-      'Estado_Operativo',
-      'Condicion_Fisica',
-      'Fecha_Ultima_Inspeccion',
-      'Nivel_Criticidad',
-      'Impacto_Falla',
-      'Riesgo_Normativo',
-      'Frecuencia_Mantenimiento_Meses',
-      'Fecha_Proximo_Mantenimiento',
-      'Costo_Mantenimiento',
-      'Costo_Reemplazo',
-      'Observaciones',
-    ],
-    'reportes': [
-      'ID_Reporte',
-      'ID_Activo',
-      'Disciplina',
-      'Fecha_Inspeccion',
-      'Estado_Detectado',
-      'Accion_Recomendada',
-      'Costo_Estimado',
-      'Responsable',
-    ],
-  },
-  'mobiliarios': {
-    'base': [
-      'ID_Activo',
-      'Disciplina',
-      'Categoria_Activo',
-      'Tipo_Activo',
-      'Bloque',
-      'Nivel',
-      'Espacio',
-      'Estado_Operativo',
-      'Condicion_Fisica',
-      'Fecha_Ultima_Inspeccion',
-      'Nivel_Criticidad',
-      'Tipo_Mobiliario',
-      'Material_Principal',
-      'Uso_Intensivo',
-      'Movilidad',
-      'Fabricante',
-      'Modelo',
-      'Fecha_Adquisicion',
-      'Vida_Util_Esperada_Anios',
-      'Costo_Reemplazo',
-      'Proveedor',
-      'Observaciones',
-    ],
-    'reportes': [
-      'ID_Reporte',
-      'ID_Activo',
-      'Disciplina',
-      'Fecha_Inspeccion',
-      'Estado_Detectado',
-      'Nivel_Desgaste',
-      'Riesgo_Usuario',
-      'Accion_Recomendada',
-      'Costo_Estimado',
-      'Responsable',
-    ],
-  },
-};
+const List<String> _baseHeaders = [
+  'ID_Activo',
+  'Disciplina',
+  'Categoria_Activo',
+  'Tipo_Activo',
+  'Marca',
+  'Modelo',
+  'Descripcion_Activo',
+  'Bloque',
+  'Nivel',
+  'Espacio',
+  'Estado_Operativo',
+  'Condicion_Fisica',
+  'Nivel_Criticidad',
+  'Riesgo_Normativo',
+  'Accion_Recomendada',
+  'Costo_Estimado',
+  'Fecha_Ultima_Inspeccion',
+];
 
-List<String> headersFor(String disciplinaKey, String tipo) {
-  return List<String>.from(parametrosHeaders[disciplinaKey]?[tipo] ?? const []);
+const List<String> _reportesHeaders = [
+  'ID_Reporte',
+  'ID_Activo',
+  'Disciplina',
+  'Fecha_Inspeccion',
+  'Tipo_Mantenimiento',
+  'Estado_Operativo',
+  'Condicion_Fisica',
+  'Nivel_Criticidad',
+  'Riesgo_Normativo',
+  'Accion_Recomendada',
+  'Costo_Estimado',
+  'Descripcion_Reporte',
+  'Responsable_Reporte',
+];
+
+List<String> headersFor(String _disciplinaKey, String tipo) {
+  if (tipo == 'base') {
+    return List<String>.from(_baseHeaders);
+  }
+  if (tipo == 'reportes') {
+    return List<String>.from(_reportesHeaders);
+  }
+  return const [];
 }
 
 dynamic valueForHeader(
@@ -212,97 +57,62 @@ dynamic valueForHeader(
   final productData = productDoc.data();
   final reportData = reportDoc?.data() ?? const <String, dynamic>{};
   final ubicacion = productData['ubicacion'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+  final attrs = productData['attrs'] as Map<String, dynamic>? ?? const <String, dynamic>{};
 
   switch (header) {
     case 'ID_Activo':
-      return productData['idActivo'] ?? productDoc.id;
+      return productDoc.id;
+    case 'ID_Reporte':
+      return reportDoc?.id ?? '';
     case 'Disciplina':
       return productData['disciplina'] ?? '';
     case 'Categoria_Activo':
-      return productData['categoria'] ?? '';
+      return productData['categoria'] ?? productData['categoriaActivo'] ?? '';
     case 'Tipo_Activo':
-      return productData['nombreProducto'] ?? productData['nombre'] ?? '';
+      return productData['nombre'] ?? productData['nombreProducto'] ?? '';
+    case 'Marca':
+      return productData['marca'] ?? attrs['marca'] ?? '';
+    case 'Modelo':
+      return productData['modelo'] ?? attrs['modelo'] ?? '';
+    case 'Descripcion_Activo':
+      return productData['descripcion'] ?? '';
     case 'Bloque':
       return ubicacion['bloque'] ?? productData['bloque'] ?? '';
     case 'Nivel':
       return ubicacion['nivel'] ?? productData['nivel'] ?? productData['piso'] ?? '';
     case 'Espacio':
       return ubicacion['area'] ?? productData['area'] ?? productData['espacio'] ?? '';
-    case 'Estado_Operativo':
-      return _formatEnum(productData['estadoOperativo'] ?? productData['estado']);
-    case 'Condicion_Fisica':
-      return _formatEnum(productData['condicionFisica']);
-    case 'Observaciones':
-      return productData['observaciones'] ?? '';
-    case 'Costo_Mantenimiento':
-      return _formatNumber(productData['costoMantenimiento']);
-    case 'Costo_Reemplazo':
-      return _formatNumber(productData['costoReemplazo']);
-    case 'Frecuencia_Mantenimiento_Meses':
-      return _formatNumber(productData['frecuenciaMantenimientoMeses']);
-    case 'Impacto_Falla':
-      return _formatEnum(productData['impactoFalla']);
-    case 'Riesgo_Normativo':
-      return _formatEnum(productData['riesgoNormativo']);
-    case 'Nivel_Criticidad':
-      return _formatEnum(productData['nivelCriticidad']);
-    case 'Tipo_Mantenimiento':
-      return _formatEnum(productData['tipoMantenimiento']);
-    case 'Fecha_Ultima_Inspeccion':
-      return _formatDate(productData['fechaUltimaInspeccion'] ?? productData['ultimaInspeccionFecha']);
-    case 'Fecha_Proximo_Mantenimiento':
-      return _formatDate(
-        _resolveNextMaintenanceDate(
-          fechaProximoMantenimiento: productData['fechaProximoMantenimiento'],
-          fechaUltimaInspeccion: productData['fechaUltimaInspeccion'] ?? productData['ultimaInspeccionFecha'],
-          frecuenciaMantenimientoMeses: productData['frecuenciaMantenimientoMeses'],
-        ),
-      );
-    case 'Fecha_Instalacion':
-      return _formatDate(productData['fechaInstalacion']);
-    case 'Vida_Util_Esperada_Anios':
-      return _formatNumber(productData['vidaUtilEsperadaAnios']);
-    case 'Tipo_Mobiliario':
-      return productData['tipoMobiliario'] ?? '';
-    case 'Material_Principal':
-      return productData['materialPrincipal'] ?? '';
-    case 'Uso_Intensivo':
-      return productData['usoIntensivo'] ?? '';
-    case 'Movilidad':
-      return productData['movilidad'] ?? '';
-    case 'Fabricante':
-      return productData['fabricante'] ?? '';
-    case 'Modelo':
-      return productData['modelo'] ?? '';
-    case 'Fecha_Adquisicion':
-      return _formatDate(productData['fechaAdquisicion']);
-    case 'Proveedor':
-      return productData['proveedor'] ?? '';
-    case 'Requiere_Reemplazo':
-      return _formatBool(productData['requiereReemplazo']);
-    case 'ID_Reporte':
-      return reportDoc?.id ?? '';
     case 'Fecha_Inspeccion':
       return _formatDate(reportData['fechaInspeccion'] ?? reportData['fecha']);
-    case 'Estado_Detectado':
-      return _formatEnum(reportData['estadoDetectado'] ?? reportData['estado']);
+    case 'Fecha_Ultima_Inspeccion':
+      return _formatDate(productData['fechaUltimaInspeccion'] ?? productData['ultimaInspeccionFecha']);
+    case 'Tipo_Mantenimiento':
+      return _formatEnum(reportData['tipoMantenimiento'] ?? productData['tipoMantenimiento']);
+    case 'Estado_Operativo':
+      return _formatEnum(
+        reportData['estadoNuevo'] ??
+            reportData['estadoOperativo'] ??
+            reportData['estadoDetectado'] ??
+            reportData['estado'] ??
+            productData['estado'],
+      );
+    case 'Condicion_Fisica':
+      return _formatEnum(reportData['condicionFisica'] ?? productData['condicionFisica']);
+    case 'Nivel_Criticidad':
+      return _formatEnum(reportData['nivelCriticidad'] ?? productData['nivelCriticidad']);
+    case 'Riesgo_Normativo':
+      return _formatEnum(reportData['riesgoNormativo'] ?? productData['riesgoNormativo']);
     case 'Accion_Recomendada':
-      return reportData['accionRecomendada'] ?? reportData['accion'] ?? '';
+      return reportData['accionRecomendada'] ?? reportData['accion'] ?? productData['accionRecomendada'] ?? '';
     case 'Costo_Estimado':
-      return _formatNumber(reportData['costoEstimado'] ?? reportData['costo']);
-    case 'Responsable':
+      return _formatNumber(reportData['costoEstimado'] ?? reportData['costo'] ?? productData['costoEstimado']);
+    case 'Descripcion_Reporte':
+      return reportData['descripcion'] ?? reportData['comentarios'] ?? '';
+    case 'Responsable_Reporte':
       if (reportDoc == null) {
         return '';
       }
       return UsuariosCacheService.instance.resolveResponsableName(reportData);
-    case 'Riesgo_Electrico':
-      return reportData['riesgoElectrico'] ?? '';
-    case 'Riesgo_Sanitario':
-      return reportData['riesgoSanitario'] ?? '';
-    case 'Nivel_Desgaste':
-      return reportData['nivelDesgaste'] ?? '';
-    case 'Riesgo_Usuario':
-      return reportData['riesgoUsuario'] ?? '';
     default:
       return '';
   }
@@ -331,16 +141,6 @@ String _formatEnum(dynamic value) {
       .join(' ');
 }
 
-String _formatBool(dynamic value) {
-  if (value == null) {
-    return '';
-  }
-  if (value is bool) {
-    return value ? 'Sí' : 'No';
-  }
-  return value.toString();
-}
-
 String _formatNumber(dynamic value) {
   if (value == null) {
     return '';
@@ -362,31 +162,4 @@ DateTime? _resolveDate(dynamic value) {
     return DateTime.tryParse(value);
   }
   return null;
-}
-
-DateTime? _resolveNextMaintenanceDate({
-  required dynamic fechaProximoMantenimiento,
-  required dynamic fechaUltimaInspeccion,
-  required dynamic frecuenciaMantenimientoMeses,
-}) {
-  final fechaProximo = _resolveDate(fechaProximoMantenimiento);
-  if (fechaProximo != null) {
-    return fechaProximo;
-  }
-  final fechaUltima = _resolveDate(fechaUltimaInspeccion);
-  final frecuencia = _resolveDouble(frecuenciaMantenimientoMeses);
-  if (fechaUltima == null || frecuencia == null) {
-    return null;
-  }
-  return addMonthsDouble(fechaUltima, frecuencia);
-}
-
-double? _resolveDouble(dynamic value) {
-  if (value == null) {
-    return null;
-  }
-  if (value is num) {
-    return value.toDouble();
-  }
-  return double.tryParse(value.toString().replaceAll(',', '.'));
 }

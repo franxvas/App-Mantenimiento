@@ -31,7 +31,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final _schemaService = SchemaService();
   final _parametrosSchemaService = ParametrosSchemaService();
   final _datasetService = ParametrosDatasetService();
-  bool _autoGenerarId = true;
+  bool _autoGenerarId = false;
   bool _isCheckingId = false;
   String? _idActivoError;
   Timer? _idCheckDebounce;
@@ -63,7 +63,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final Map<String, TextEditingController> _dynamicControllers = {};
 
   String _estado = 'operativo';
-  static const List<String> _estadoOptions = ['operativo', 'defectuoso', 'fuera_servicio'];
+  static const List<String> _estadoOptions = ['operativo', 'defectuoso', 'fuera de servicio'];
   
   DateTime? _fechaInstalacion;
   DateTime? _fechaAdquisicion;
@@ -71,6 +71,32 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
 
   File? _imageFile;
   String? _currentImageUrl;
+
+  Future<void> _generateAutoId() async {
+    try {
+      final counter = await _getAndIncrementActivoCounter(_disciplinaKey);
+      final correlativo = ActivoIdHelper.formatCorrelativo(counter);
+      final generated = ActivoIdHelper.buildId(
+        disciplinaKey: _disciplinaKey,
+        nombre: _nombreController.text.trim(),
+        bloque: _bloqueController.text.trim(),
+        nivel: _nivelController.text.trim(),
+        correlativo: correlativo,
+      );
+      if (!mounted) return;
+      setState(() {
+        _idActivoCorrelativo = correlativo;
+        _idActivoController.text = generated;
+        _idActivoError = null;
+      });
+      _scheduleIdActivoCheck(generated);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo autogenerar el ID: $e')),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -89,8 +115,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _espacioController.text = widget.initialData['espacio']?.toString() ??
         widget.initialData['ubicacion']?['area']?.toString() ??
         '';
-    final estadoInicial = widget.initialData['estadoOperativo']?.toString().toLowerCase() ??
-        widget.initialData['estado']?.toString().toLowerCase() ??
+    final estadoInicial = widget.initialData['estado']?.toString().toLowerCase() ??
         'operativo';
     _estado = _estadoOptions.contains(estadoInicial) ? estadoInicial : 'operativo';
     _currentImageUrl = widget.initialData['imagenUrl']; 
@@ -103,7 +128,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
       _dynamicControllers[entry.key] = TextEditingController(text: entry.value?.toString() ?? '');
     }
 
-    _idActivoController.text = widget.initialData['idActivo']?.toString() ?? '';
+    _idActivoController.text = widget.productId;
     _idActivoCorrelativo =
         ActivoIdHelper.extractCorrelativo(_idActivoController.text) ?? _idActivoCorrelativo;
     _frecuenciaMantenimientoController.text =
@@ -121,7 +146,9 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
     _proveedorController.text = widget.initialData['proveedor']?.toString() ?? '';
     _observacionesController.text = widget.initialData['observaciones']?.toString() ?? '';
     _fechaAdquisicion = _resolveDate(widget.initialData['fechaAdquisicion']);
-    _updateIdActivoPreview();
+    if (_autoGenerarId) {
+      _updateIdActivoPreview();
+    }
   }
 
   @override
@@ -219,50 +246,33 @@ Future<String?> _uploadToSupabase() async {
     final currentSnapshot = await productRef.get();
     final currentData = currentSnapshot.data() ?? <String, dynamic>{};
     final currentCostoMantenimiento = currentData['costoMantenimiento'];
-    final currentEstadoOperativo = currentData['estadoOperativo'] ?? currentData['estado'] ?? _estado;
-
     String idActivo;
     if (_autoGenerarId) {
-      idActivo = ActivoIdHelper.buildId(
-        disciplinaKey: disciplinaKey,
-        nombre: _nombreController.text.trim(),
-        bloque: _bloqueController.text.trim(),
-        nivel: _nivelController.text.trim(),
-        correlativo: _idActivoCorrelativo,
-      );
-      final unique = await _checkIdActivoUnique(idActivo);
-      if (!unique) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Ese ID ya existe, usa otro.')),
-          );
-        }
-        return;
+      if (_idActivoController.text.trim().isEmpty) {
+        await _generateAutoId();
       }
+      idActivo = _idActivoController.text.trim();
     } else {
       idActivo = _idActivoController.text.trim();
-      final unique = await _checkIdActivoUnique(idActivo);
-      if (!unique) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Ese ID ya existe, usa otro.')),
-          );
-        }
-        return;
+    }
+    final unique = await _checkIdActivoUnique(idActivo);
+    if (!unique) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ese ID ya existe, usa otro.')),
+        );
       }
+      return;
     }
     final productData = {
       'nombre': _nombreController.text,
-      'nombreProducto': _nombreController.text,
       'descripcion': _descripcionController.text,
-      'estado': currentEstadoOperativo,
-      'estadoOperativo': currentEstadoOperativo,
+      'estado': _estado,
       'nivel': _nivelController.text,
       'disciplina': disciplinaKey,
       'categoria': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'categoriaActivo': widget.initialData['categoria'] ?? widget.initialData['categoriaActivo'],
       'subcategoria': _subcategoriaController.text.trim().isEmpty ? null : _subcategoriaController.text.trim(),
-      'idActivo': idActivo,
       'bloque': _bloqueController.text.trim(),
       'espacio': _espacioController.text.trim(),
       'frecuenciaMantenimientoMeses': _parseDouble(_frecuenciaMantenimientoController.text),
@@ -270,9 +280,9 @@ Future<String?> _uploadToSupabase() async {
       'costoReemplazo': _parseDouble(_costoReemplazoController.text),
       'fechaInstalacion': _fechaInstalacion,
       'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaController.text),
-      'codigoQR': idActivo,
       ...topLevelValues,
       'marca': _marcaController.text.trim(),
+      'modelo': _modeloController.text.trim().isEmpty ? null : _modeloController.text.trim(),
       'serie': _serieController.text.trim(),
       'ubicacion': {
         'nivel': _nivelController.text,
@@ -289,7 +299,6 @@ Future<String?> _uploadToSupabase() async {
         'usoIntensivo': _usoIntensivoController.text.trim(),
         'movilidad': _movilidadController.text.trim(),
         'fabricante': _fabricanteController.text.trim(),
-        'modelo': _modeloController.text.trim(),
         'fechaAdquisicion': _fechaAdquisicion,
         'proveedor': _proveedorController.text.trim(),
       });
@@ -300,12 +309,42 @@ Future<String?> _uploadToSupabase() async {
     }
 
     final columns = await _parametrosSchemaService.fetchColumns(disciplinaKey, 'base');
-    await _datasetService.updateProductoWithDataset(
-      productRef: productRef,
-      productData: productData,
-      disciplina: disciplinaKey,
-      columns: columns,
-    );
+    final productUpdateData = Map<String, dynamic>.from(productData)
+      ..addAll({
+        'idActivo': FieldValue.delete(),
+        'codigoQR': FieldValue.delete(),
+        'estadoOperativo': FieldValue.delete(),
+        'nombreProducto': FieldValue.delete(),
+        'tipoActivo': FieldValue.delete(),
+      });
+    final idRenamed = idActivo.trim() != widget.productId;
+    if (idRenamed) {
+      final existsDoc = await FirebaseFirestore.instance.collection('productos').doc(idActivo).get();
+      if (existsDoc.exists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ese ID ya existe, usa otro.')),
+          );
+        }
+        return;
+      }
+      await _renameProductoWithIdChange(
+        oldId: widget.productId,
+        newId: idActivo,
+        currentData: currentData,
+        productData: productData,
+        disciplina: disciplinaKey,
+        columns: columns,
+      );
+    } else {
+      await _datasetService.updateProductoWithDataset(
+        productRef: productRef,
+        productData: productData,
+        disciplina: disciplinaKey,
+        columns: columns,
+        productUpdateData: productUpdateData,
+      );
+    }
 
     final effectiveData = Map<String, dynamic>.from(productData);
     if (newImageUrl == null || newImageUrl.isEmpty) {
@@ -313,7 +352,10 @@ Future<String?> _uploadToSupabase() async {
         effectiveData['imagenUrl'] = currentData['imagenUrl'];
       }
     }
-    final diff = _buildAuditDiff(currentData, effectiveData);
+    final diff = _buildAuditDiff(
+      {...currentData, '_docId': widget.productId},
+      {...effectiveData, '_docId': idActivo},
+    );
 
     await AuditService.logEvent(
       action: 'asset.update',
@@ -353,7 +395,7 @@ Future<String?> _uploadToSupabase() async {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Producto actualizado con éxito!')),
       );
-      Navigator.pop(context);
+      Navigator.pop(context, idActivo);
     }
   }
 
@@ -431,6 +473,11 @@ Future<String?> _uploadToSupabase() async {
               controller: _marcaController,
               label: 'Marca',
             ),
+            if (!_isMobiliarios)
+              _buildTextField(
+                controller: _modeloController,
+                label: 'Modelo',
+              ),
             _buildTextField(
               controller: _serieController,
               label: 'Serie',
@@ -474,16 +521,24 @@ Future<String?> _uploadToSupabase() async {
             const SizedBox(height: 10),
             CheckboxListTile(
               value: _autoGenerarId,
-              onChanged: (value) {
+              onChanged: (value) async {
+                final enable = value ?? false;
+                if (!enable) {
+                  setState(() {
+                    _autoGenerarId = false;
+                    _idActivoError = null;
+                    _lastCheckedId = null;
+                    _lastCheckedUnique = null;
+                  });
+                  return;
+                }
                 setState(() {
-                  _autoGenerarId = value ?? true;
+                  _autoGenerarId = true;
                   _idActivoError = null;
                   _lastCheckedId = null;
                   _lastCheckedUnique = null;
-                  if (_autoGenerarId) {
-                    _updateIdActivoPreview();
-                  }
                 });
+                await _generateAutoId();
               },
               title: const Text('Autogenerar ID'),
               controlAffinity: ListTileControlAffinity.leading,
@@ -652,12 +707,9 @@ Future<String?> _uploadToSupabase() async {
       _isCheckingId = true;
       _idActivoError = null;
     });
-    final snapshot = await FirebaseFirestore.instance
-        .collection('productos')
-        .where('idActivo', isEqualTo: value)
-        .limit(2)
-        .get();
-    final conflict = snapshot.docs.any((doc) => doc.id != widget.productId);
+    final docSnap = await FirebaseFirestore.instance.collection('productos').doc(value).get();
+    final conflictByDocId = docSnap.exists && docSnap.id != widget.productId;
+    final conflict = conflictByDocId;
     final unique = !conflict;
     if (!mounted) return unique;
     setState(() {
@@ -667,6 +719,67 @@ Future<String?> _uploadToSupabase() async {
       _lastCheckedUnique = unique;
     });
     return unique;
+  }
+
+  Future<int> _getAndIncrementActivoCounter(String disciplinaKey) async {
+    final counterRef = FirebaseFirestore.instance
+        .collection('metadata')
+        .doc('counters')
+        .collection('activos')
+        .doc(disciplinaKey);
+
+    return FirebaseFirestore.instance.runTransaction((transaction) async {
+      final snapshot = await transaction.get(counterRef);
+      final data = snapshot.data() ?? <String, dynamic>{};
+      final currentNumber = (data['seq'] as int?) ?? 0;
+      final nextNumber = currentNumber + 1;
+      transaction.set(counterRef, {'seq': nextNumber}, SetOptions(merge: true));
+      return nextNumber;
+    });
+  }
+
+  Future<void> _renameProductoWithIdChange({
+    required String oldId,
+    required String newId,
+    required Map<String, dynamic> currentData,
+    required Map<String, dynamic> productData,
+    required String disciplina,
+    required List<ParametrosSchemaColumn> columns,
+  }) async {
+    final firestore = FirebaseFirestore.instance;
+    final oldRef = firestore.collection('productos').doc(oldId);
+    final newRef = firestore.collection('productos').doc(newId);
+
+    final mergedData = Map<String, dynamic>.from(currentData)..addAll(productData);
+    mergedData.remove('idActivo');
+    mergedData.remove('codigoQR');
+    mergedData.remove('estadoOperativo');
+    mergedData.remove('nombreProducto');
+    mergedData.remove('tipoActivo');
+    mergedData['updatedAt'] = FieldValue.serverTimestamp();
+
+    await newRef.set(mergedData, SetOptions(merge: true));
+
+    final reportesSnap = await oldRef.collection('reportes').get();
+    for (final doc in reportesSnap.docs) {
+      final data = Map<String, dynamic>.from(doc.data());
+      data['productId'] = newId;
+      await newRef.collection('reportes').doc(doc.id).set(data, SetOptions(merge: true));
+      await firestore.collection('reportes').doc(doc.id).set(data, SetOptions(merge: true));
+    }
+
+    await _datasetService.renameProductoWithDataset(
+      oldProductId: oldId,
+      newProductId: newId,
+      productData: mergedData,
+      disciplina: disciplina,
+      columns: columns,
+    );
+
+    for (final doc in reportesSnap.docs) {
+      await oldRef.collection('reportes').doc(doc.id).delete();
+    }
+    await oldRef.delete();
   }
 
   Widget _buildTextField({
@@ -788,7 +901,7 @@ Future<String?> _uploadToSupabase() async {
   }
 
   Map<String, dynamic> _extractTopLevel(Map<String, dynamic> attrs) {
-    const keys = ['marca', 'serie', 'codigoQR'];
+    const keys = ['marca', 'serie'];
     final result = <String, dynamic>{};
     for (final key in keys) {
       if (attrs.containsKey(key)) {
@@ -838,7 +951,7 @@ Future<String?> _uploadToSupabase() async {
       'ubicacion.bloque',
       'ubicacion.nivel',
       'ubicacion.area',
-      'estadoOperativo',
+      'estado',
       'frecuenciaMantenimientoMeses',
       'costoReemplazo',
       'vidaUtilEsperadaAnios',
@@ -923,8 +1036,8 @@ Future<String?> _uploadToSupabase() async {
         return ubicacion?['nivel'] ?? data['nivel'] ?? data['piso'];
       case 'ubicacion.area':
         return ubicacion?['area'] ?? data['espacio'] ?? data['area'];
-      case 'estadoOperativo':
-        return data['estadoOperativo'] ?? data['estado'];
+      case 'estado':
+        return data['estado'];
       case 'frecuenciaMantenimientoMeses':
         return data['frecuenciaMantenimientoMeses'];
       case 'costoReemplazo':
@@ -954,7 +1067,7 @@ Future<String?> _uploadToSupabase() async {
       case 'imagenUrl':
         return data['imagenUrl'];
       case 'idActivo':
-        return data['idActivo'];
+        return data['_docId'] ?? data['id'] ?? data['productId'];
       default:
         return data[field];
     }

@@ -131,8 +131,7 @@ class _ReporteListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String estado = reporte['estadoOperativo'] ??
-        reporte['estadoNuevo'] ??
+    final String estado = reporte['estadoNuevo'] ??
         reporte['estadoDetectado'] ??
         reporte['estado_nuevo'] ??
         reporte['estado'] ??
@@ -172,9 +171,9 @@ class _ReporteListCard extends StatelessWidget {
             child: Icon(isOk ? Icons.check : Icons.warning, color: statusColor),
           ),
           title: Text(
-            reporte['nombreProducto'] ??
+            reporte['activoNombre'] ??
                 reporte['activo_nombre'] ??
-                reporte['activoNombre'] ??
+                reporte['nombreProducto'] ??
                 'Producto desconocido', 
             style: const TextStyle(fontWeight: FontWeight.bold),
             maxLines: 1,

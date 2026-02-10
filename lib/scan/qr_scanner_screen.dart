@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:appmantflutter/productos/detalle_producto_screen.dart';
 import 'package:appmantflutter/reportes/generar_reporte_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 
 class QRScannerScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   );
   
   bool _isProcessing = false; // Para evitar múltiples navegaciones simultáneas
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void dispose() {
@@ -30,8 +32,8 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   }
 
   // --- LÓGICA DE BÚSQUEDA EN FIREBASE ---
-  Future<void> _handleBarcode(BarcodeCapture capture) async {
-    if (_isProcessing) return; 
+  Future<void> _handleBarcode(BarcodeCapture capture, {bool ignoreProcessing = false}) async {
+    if (_isProcessing && !ignoreProcessing) return; 
 
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
@@ -46,22 +48,20 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     );
 
     try {
-      // 1. Buscar en Firestore el producto con ese 'codigoQR'
-      final querySnapshot = await FirebaseFirestore.instance
+      final productosRef = FirebaseFirestore.instance
           .collection('productos')
           .withConverter<Map<String, dynamic>>(
             fromFirestore: (snapshot, _) => snapshot.data() ?? {},
             toFirestore: (data, _) => data,
-          )
-          .where('codigoQR', isEqualTo: code) // Filtra por el campo codigoQR
-          .limit(1)
-          .get();
+          );
 
-      if (querySnapshot.docs.isNotEmpty) {
-        // 2. ¡ENCONTRADO! Obtener el ID del documento
-        final doc = querySnapshot.docs.first;
-        final String productId = doc.id;
-        final data = doc.data();
+      final docSnap = await productosRef.doc(code).get();
+      final DocumentSnapshot<Map<String, dynamic>>? resolvedDoc =
+          docSnap.exists ? docSnap : null;
+
+      if (resolvedDoc != null) {
+        final String productId = resolvedDoc.id;
+        final data = resolvedDoc.data() ?? <String, dynamic>{};
 
         if (mounted) {
           if (widget.onProductFound != null) {
@@ -170,9 +170,53 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
               ),
             ),
           ),
+          Positioned(
+            bottom: 110,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: ElevatedButton.icon(
+                onPressed: _isProcessing ? null : _pickAndAnalyzeImage,
+                icon: const Icon(Icons.upload_file),
+                label: const Text('Subir código QR'),
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _pickAndAnalyzeImage() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (image == null) return;
+
+      setState(() => _isProcessing = true);
+
+      final capture = await controller.analyzeImage(image.path);
+      if (capture == null || capture.barcodes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se detectó ningún QR en la imagen.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          setState(() => _isProcessing = false);
+        }
+        return;
+      }
+
+      await _handleBarcode(capture, ignoreProcessing: true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al leer imagen: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _isProcessing = false);
+      }
+    }
   }
 
   // Diseño del cuadro semitransparente (Se mantiene igual)

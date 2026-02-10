@@ -101,22 +101,41 @@ class _BaseViewer extends StatelessWidget {
             if (!snapshot.hasData) {
               return const Center(child: Text('No hay parámetros disponibles.'));
             }
+            final products = snapshot.data!.docs;
+            final reportesRef = FirebaseFirestore.instance
+                .collection('reportes')
+                .withConverter<Map<String, dynamic>>(
+                  fromFirestore: (snapshot, _) => snapshot.data() ?? {},
+                  toFirestore: (data, _) => data,
+                );
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: reportesRef.where('disciplina', isEqualTo: disciplinaKey).snapshots(),
+              builder: (context, reportSnapshot) {
+                if (reportSnapshot.connectionState == ConnectionState.waiting && !reportSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-            final rows = snapshot.data!.docs
-                .map((doc) => DatasetRow.fromBaseDocument(
-                      doc,
-                      columns,
-                      categoriaLabelResolver: resolveCategoria,
-                    ))
-                .toList()
-              ..sort(DatasetRow.sortByNombre);
+                final reportSummaries = _buildBaseReportSummaryMap(
+                  reportSnapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+                );
+                final rows = products
+                    .map((doc) => DatasetRow.fromBaseDocument(
+                          doc,
+                          columns,
+                          categoriaLabelResolver: resolveCategoria,
+                          reportSummary: reportSummaries[doc.id],
+                        ))
+                    .toList()
+                  ..sort(DatasetRow.sortByNombre);
 
-            return _ViewerContent(
-              columns: columns,
-              rows: rows,
-              disciplinaKey: disciplinaKey,
-              disciplinaLabel: disciplinaLabel,
-              tipo: 'base',
+                return _ViewerContent(
+                  columns: columns,
+                  rows: rows,
+                  disciplinaKey: disciplinaKey,
+                  disciplinaLabel: disciplinaLabel,
+                  tipo: 'base',
+                );
+              },
             );
           },
         );
@@ -586,6 +605,7 @@ class DatasetRow {
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
     List<DatasetColumn> columns, {
     String? Function(String? value)? categoriaLabelResolver,
+    _BaseReportSummary? reportSummary,
   }
   ) {
     final values = <String, dynamic>{};
@@ -601,6 +621,21 @@ class DatasetRow {
         if (resolved != null && resolved.trim().isNotEmpty) {
           value = resolved;
         }
+      }
+      if (column.header == 'Costo_Estimado') {
+        final total = reportSummary?.costoEstimadoTotal;
+        if (total == null) {
+          value = '';
+        } else {
+          final isInt = total == total.roundToDouble();
+          value = isInt ? total.toInt() : total;
+        }
+      }
+      if (column.header == 'Accion_Recomendada') {
+        value = reportSummary?.accionRecomendada ?? '';
+      }
+      if (column.header == 'Tipo_Mantenimiento') {
+        value = reportSummary?.tipoMantenimiento ?? '';
       }
       values[column.header] = value;
     }
@@ -628,4 +663,157 @@ class DatasetRow {
     final sortKey = nombre.isNotEmpty ? '${nombre.toLowerCase()}-${doc.id.toLowerCase()}' : doc.id.toLowerCase();
     return DatasetRow(values: values, sortKey: sortKey);
   }
+}
+
+class _BaseReportSummary {
+  final double? costoEstimadoTotal;
+  final String accionRecomendada;
+  final String tipoMantenimiento;
+
+  const _BaseReportSummary({
+    required this.costoEstimadoTotal,
+    required this.accionRecomendada,
+    required this.tipoMantenimiento,
+  });
+}
+
+class _MutableBaseReportSummary {
+  double totalCostoEstimado = 0;
+  bool hasCosto = false;
+  int? latestNro;
+  DateTime? latestDate;
+  String accionRecomendada = '';
+  String tipoMantenimiento = '';
+}
+
+Map<String, _BaseReportSummary> _buildBaseReportSummaryMap(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> reportDocs,
+) {
+  final mutable = <String, _MutableBaseReportSummary>{};
+  for (final doc in reportDocs) {
+    final data = doc.data();
+    final productId = _extractReportProductId(data).trim();
+    if (productId.isEmpty) {
+      continue;
+    }
+    final summary = mutable.putIfAbsent(productId, () => _MutableBaseReportSummary());
+
+    final costo = _parseReportCosto(data['costoEstimado'] ?? data['costo']);
+    if (costo != null) {
+      summary.totalCostoEstimado += costo;
+      summary.hasCosto = true;
+    }
+
+    final reportNro = _parseReportNro(data['nro']);
+    final reportDate = _resolveReportSortDate(data);
+    final shouldReplace = _isLatestReport(summary, reportNro, reportDate);
+    if (shouldReplace) {
+      summary.latestNro = reportNro ?? summary.latestNro;
+      summary.latestDate = reportDate;
+      summary.accionRecomendada = _cleanText(data['accionRecomendada'] ?? data['accion']);
+      summary.tipoMantenimiento = _cleanText(data['tipoMantenimiento']);
+    }
+  }
+
+  final result = <String, _BaseReportSummary>{};
+  for (final entry in mutable.entries) {
+    final item = entry.value;
+    result[entry.key] = _BaseReportSummary(
+      costoEstimadoTotal: item.hasCosto ? item.totalCostoEstimado : null,
+      accionRecomendada: item.accionRecomendada,
+      tipoMantenimiento: item.tipoMantenimiento,
+    );
+  }
+  return result;
+}
+
+String _extractReportProductId(Map<String, dynamic> data) {
+  final productId = data['productId'] ?? data['idActivo'] ?? data['activoId'];
+  return productId?.toString() ?? '';
+}
+
+String _cleanText(dynamic value) {
+  if (value == null) {
+    return '';
+  }
+  return value.toString().trim();
+}
+
+double? _parseReportCosto(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is num) {
+    return value.toDouble();
+  }
+  final text = value.toString().trim();
+  if (text.isEmpty) {
+    return null;
+  }
+  var normalized = text.replaceAll(RegExp(r'[^0-9,\.-]'), '');
+  if (normalized.contains(',') && normalized.contains('.')) {
+    normalized = normalized.replaceAll(',', '');
+  } else if (normalized.contains(',') && !normalized.contains('.')) {
+    normalized = normalized.replaceAll(',', '.');
+  }
+  return double.tryParse(normalized);
+}
+
+DateTime _resolveReportSortDate(Map<String, dynamic> data) {
+  final createdAt = _resolveDateTime(data['createdAt']);
+  if (createdAt != null) {
+    return createdAt;
+  }
+  final fechaInspeccion = _resolveDateTime(data['fechaInspeccion']);
+  if (fechaInspeccion != null) {
+    return fechaInspeccion;
+  }
+  final fecha = _resolveDateTime(data['fecha']);
+  if (fecha != null) {
+    return fecha;
+  }
+  return DateTime.fromMillisecondsSinceEpoch(0);
+}
+
+DateTime? _resolveDateTime(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is Timestamp) {
+    return value.toDate();
+  }
+  if (value is DateTime) {
+    return value;
+  }
+  if (value is String) {
+    return DateTime.tryParse(value);
+  }
+  return null;
+}
+
+int? _parseReportNro(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  return int.tryParse(value.toString().trim());
+}
+
+bool _isLatestReport(_MutableBaseReportSummary summary, int? reportNro, DateTime reportDate) {
+  if (reportNro != null) {
+    final currentNro = summary.latestNro;
+    if (currentNro == null || reportNro > currentNro) {
+      return true;
+    }
+    if (reportNro < currentNro) {
+      return false;
+    }
+  } else if (summary.latestNro != null) {
+    return false;
+  }
+
+  final currentDate = summary.latestDate;
+  return currentDate == null || reportDate.isAfter(currentDate);
 }

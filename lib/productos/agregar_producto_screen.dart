@@ -233,41 +233,36 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       } else {
         idActivo = _idActivoCtrl.text.trim();
       }
-      final String codigoQr = idActivo;
+    final schema = await _schemaService.fetchSchema(_disciplina.toLowerCase());
+    final attrs = _collectDynamicAttrs(schema?.fields ?? []);
+    final topLevelValues = _extractTopLevel(attrs);
+    final nivelValue = _nivelCtrl.text;
 
-      final schema = await _schemaService.fetchSchema(_disciplina.toLowerCase());
-      final attrs = _collectDynamicAttrs(schema?.fields ?? []);
-      final topLevelValues = _extractTopLevel(attrs);
-      final nivelValue = _nivelCtrl.text;
-
-      final productRef = FirebaseFirestore.instance.collection('productos').doc();
-      final productData = {
-        'nombre': _nombreCtrl.text,
-        'nombreProducto': _nombreCtrl.text,
-        'descripcion': _descripcionCtrl.text,
-        'categoria': _categoria,
-        'categoriaActivo': _categoria,
-        'disciplina': disciplinaKey,
-        'subcategoria': _subcategoriaCtrl.text.trim().isEmpty ? null : _subcategoriaCtrl.text.trim(),
-        'estado': _estado,
-        'estadoOperativo': _estado,
-        'fechaInstalacion': _fechaInstalacionCustom ? _fechaInstalacion : FieldValue.serverTimestamp(),
-        'fechaCreacion': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'nivel': nivelValue,
-        'idActivo': idActivo,
-        'bloque': _bloqueCtrl.text.trim(),
-        'espacio': _areaCtrl.text.trim(),
-        'frecuenciaMantenimientoMeses': _parseDouble(_frecuenciaMantenimientoCtrl.text),
+    final productRef = FirebaseFirestore.instance.collection('productos').doc(idActivo);
+    final productData = {
+      'nombre': _nombreCtrl.text,
+      'descripcion': _descripcionCtrl.text,
+      'categoria': _categoria,
+      'categoriaActivo': _categoria,
+      'disciplina': disciplinaKey,
+      'subcategoria': _subcategoriaCtrl.text.trim().isEmpty ? null : _subcategoriaCtrl.text.trim(),
+      'estado': _estado,
+      'fechaInstalacion': _fechaInstalacionCustom ? _fechaInstalacion : FieldValue.serverTimestamp(),
+      'fechaCreacion': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'nivel': nivelValue,
+      'bloque': _bloqueCtrl.text.trim(),
+      'espacio': _areaCtrl.text.trim(),
+      'frecuenciaMantenimientoMeses': _parseDouble(_frecuenciaMantenimientoCtrl.text),
         'costoMantenimiento': 0.0,
         'costoReemplazo': _parseDouble(_costoReemplazoCtrl.text),
-        'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaCtrl.text),
+      'vidaUtilEsperadaAnios': _parseDouble(_vidaUtilEsperadaCtrl.text),
         'tipoMobiliario': _isMobiliarios ? _tipoMobiliarioCtrl.text.trim() : null,
         'materialPrincipal': _isMobiliarios ? _materialPrincipalCtrl.text.trim() : null,
         'usoIntensivo': _isMobiliarios ? _usoIntensivoCtrl.text.trim() : null,
         'movilidad': _isMobiliarios ? _movilidadCtrl.text.trim() : null,
         'fabricante': _isMobiliarios ? _fabricanteCtrl.text.trim() : null,
-        'modelo': _isMobiliarios ? _modeloCtrl.text.trim() : null,
+        'modelo': _modeloCtrl.text.trim().isEmpty ? null : _modeloCtrl.text.trim(),
         'fechaAdquisicion': _isMobiliarios && _fechaAdquisicionCustom && _fechaAdquisicion != null
             ? Timestamp.fromDate(_fechaAdquisicion!)
             : null,
@@ -276,7 +271,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         ...topLevelValues,
         'marca': _marcaCtrl.text.trim(),
         'serie': _serieCtrl.text.trim(),
-        'codigoQR': codigoQr,
         'ubicacion': {
           'bloque': _bloqueCtrl.text,
           'nivel': nivelValue,
@@ -379,12 +373,8 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
       _isCheckingId = true;
       _idActivoError = null;
     });
-    final snapshot = await FirebaseFirestore.instance
-        .collection('productos')
-        .where('idActivo', isEqualTo: value)
-        .limit(1)
-        .get();
-    final unique = snapshot.docs.isEmpty;
+    final docSnap = await FirebaseFirestore.instance.collection('productos').doc(value).get();
+    final unique = !docSnap.exists;
     if (!mounted) return unique;
     setState(() {
       _isCheckingId = false;
@@ -473,6 +463,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
                 isManual: true,
               ),
               _buildTextField(_marcaCtrl, "Marca"),
+              if (!_isMobiliarios) _buildTextField(_modeloCtrl, "Modelo"),
               _buildTextField(
                 _serieCtrl,
                 "Serie",
@@ -702,7 +693,6 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
     _usoIntensivoCtrl.clear();
     _movilidadCtrl.clear();
     _fabricanteCtrl.clear();
-    _modeloCtrl.clear();
     _proveedorCtrl.clear();
     _observacionesCtrl.clear();
     _fechaAdquisicion = null;
@@ -839,7 +829,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
   }
 
   Map<String, dynamic> _extractTopLevel(Map<String, dynamic> attrs) {
-    const keys = ['marca', 'serie', 'codigoQR'];
+    const keys = ['marca', 'serie'];
     final result = <String, dynamic>{};
     for (final key in keys) {
       if (attrs.containsKey(key)) {

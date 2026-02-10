@@ -68,7 +68,8 @@ class _SeleccionarProductoReporteScreenState extends State<SeleccionarProductoRe
                   final data = doc.data();
                   final nombre = (data['nombre'] ?? '').toString().toLowerCase();
                   final categoria = (data['categoria'] ?? '').toString().toLowerCase();
-                  final codigoQr = (data['codigoQR'] ?? '').toString().toLowerCase();
+                  final codigoQr =
+                      doc.id.toLowerCase();
                   return nombre.contains(_searchQuery) ||
                       categoria.contains(_searchQuery) ||
                       codigoQr.contains(_searchQuery);

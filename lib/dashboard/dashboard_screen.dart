@@ -39,9 +39,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         toFirestore: (data, _) => data,
       );
 
-      final operativosSnapshot = await productosRef.where('estadoOperativo', isEqualTo: 'operativo').count().get();
-      final defectuososSnapshot = await productosRef.where('estadoOperativo', isEqualTo: 'defectuoso').count().get();
-      final fueraServicioSnapshot = await productosRef.where('estadoOperativo', isEqualTo: 'fuera_servicio').count().get();
+      final operativosSnapshot = await productosRef.where('estado', isEqualTo: 'operativo').count().get();
+      final defectuososSnapshot = await productosRef.where('estado', isEqualTo: 'defectuoso').count().get();
+      final fueraServicioSnapshot = await productosRef
+          .where('estado', whereIn: ['fuera de servicio', 'fuera_servicio'])
+          .count()
+          .get();
 
       _totalOperativos = operativosSnapshot.count ?? 0;
       _totalDefectuosos = defectuososSnapshot.count ?? 0;
@@ -103,7 +106,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           topEquipos.add(
             _TopEquipo(
               productId: doc.id,
-              nombre: (data['nombreProducto'] ?? data['nombre'] ?? 'Activo').toString(),
+              nombre: (data['nombre'] ?? data['nombreProducto'] ?? 'Activo').toString(),
               imagenUrl: data['imagenUrl']?.toString(),
               totalReportes: conteoPorEquipo[doc.id] ?? 0,
             ),
