@@ -169,13 +169,6 @@ git config pull.rebase true
 
 ---
 
-## 📄 Licencia
-
-Definir licencia del proyecto (MIT, Apache 2.0, etc.).
-
----
-
 ## 📩 Autor
 
-**Correo Invalido**  
 Repositorio: https://github.com/franxvas/App-Mantenimiento
