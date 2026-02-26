@@ -896,7 +896,30 @@ String _normalizeCategoryKey(String value) {
 
 bool _disciplinaMatches(String rawValue, String disciplinaKey) {
   if (rawValue.trim().isEmpty) return false;
-  return _normalizeToken(rawValue) == _normalizeToken(disciplinaKey);
+  return _canonicalDisciplinaKey(rawValue) == _canonicalDisciplinaKey(disciplinaKey);
+}
+
+String _canonicalDisciplinaKey(String value) {
+  final normalized = _normalizeToken(value);
+  if (normalized.isEmpty) return normalized;
+
+  // Acepta disciplina en singular/plural y variantes comunes.
+  const aliases = <String, String>{
+    'arquitectura': 'arquitectura',
+    'arquitecturas': 'arquitectura',
+    'electrica': 'electricas',
+    'electricas': 'electricas',
+    'estructura': 'estructuras',
+    'estructuras': 'estructuras',
+    'mecanica': 'mecanica',
+    'mecanicas': 'mecanica',
+    'sanitaria': 'sanitarias',
+    'sanitarias': 'sanitarias',
+    'mobiliario': 'mobiliarios',
+    'mobiliarios': 'mobiliarios',
+  };
+
+  return aliases[normalized] ?? normalized;
 }
 
 bool _isEmptyValue(dynamic value) {
