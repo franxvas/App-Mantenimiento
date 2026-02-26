@@ -24,7 +24,7 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    print("✅ Firebase inicializado");
+    print("Firebase inicializado");
   } catch (e) {
     print("Error al inicializar Firebase: $e");
   }
@@ -35,7 +35,7 @@ void main() async {
       url: 'https://qtpbivwozdnskjdqstzi.supabase.co',
       anonKey: 'sb_publishable_79mIXMNqVBwOxX94ZDLhEg_YHd2LNzi',
     );
-    print("✅ Supabase inicializado");
+    print("Supabase inicializado");
   } catch (e) {
     print("Error al inicializar Supabase: $e");
   }
