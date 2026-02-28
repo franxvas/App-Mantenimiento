@@ -780,7 +780,7 @@ class _AgregarProductoScreenState extends State<AgregarProductoScreen> {
         return _buildDropdown(
           field.displayName,
           _estado,
-          ['operativo', 'fuera de servicio', 'defectuoso'],
+          ['operativo', 'fuera de servicio'],
           (value) => setState(() => _estado = value ?? _estado),
         );
       }

@@ -138,7 +138,8 @@ class DetalleProductoScreen extends StatelessWidget {
           final Map<String, dynamic> attrs = data['attrs'] ?? {};
           final String imageUrl = data['imagenUrl'] ?? ''; 
           final String codigoQR = productId;
-          final String estadoOperativo = (data['estado'] ?? 'operativo').toString().toLowerCase();
+          final String estadoOperativo =
+              _normalizeEstado((data['estado'] ?? 'operativo').toString().toLowerCase());
 
           final Timestamp? tsInstalacion = data['fechaInstalacion'];
           final String fechaInstalacion = tsInstalacion != null
@@ -586,14 +587,20 @@ Color _estadoColor(String estado) {
   switch (estado.toLowerCase()) {
     case 'operativo':
       return const Color(0xFF2ECC71);
-    case 'defectuoso':
-      return const Color(0xFFF39C12);
     case 'fuera_servicio':
     case 'fuera de servicio':
       return const Color(0xFFE74C3C);
     default:
       return const Color(0xFF95A5A6);
   }
+}
+
+String _normalizeEstado(String estado) {
+  final normalized = estado.toLowerCase().replaceAll('_', ' ').trim();
+  if (normalized == 'defectuoso') {
+    return 'fuera de servicio';
+  }
+  return estado;
 }
 
 String _formatLabel(String value) {

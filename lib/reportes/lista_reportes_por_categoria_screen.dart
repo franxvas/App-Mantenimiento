@@ -137,12 +137,7 @@ class _ReporteListCard extends StatelessWidget {
         reporte['estado'] ??
         'registrado';
     final bool isOk = estado.toLowerCase() == 'operativo' || estado.toLowerCase() == 'completado';
-    final bool isDefectuoso = estado.toLowerCase() == 'defectuoso';
-    final Color statusColor = isOk
-        ? Colors.green
-        : isDefectuoso
-            ? Colors.orange
-            : Colors.red;
+    final Color statusColor = isOk ? Colors.green : Colors.red;
     
     final DateTime? fecha = _resolveFechaHora(reporte);
     final String fechaDisplay = fecha == null ? '--/--/----' : formatDateTimeDMYHM(fecha);

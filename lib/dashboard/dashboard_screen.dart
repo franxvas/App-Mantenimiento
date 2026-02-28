@@ -15,7 +15,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   
   int _totalOperativos = 0;
-  int _totalDefectuosos = 0;
   int _totalFueraServicio = 0;
   List<int> _reportesPorDia = List.filled(7, 0);
   List<String> _labelsDias = List.filled(7, '');
@@ -40,14 +39,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       final operativosSnapshot = await productosRef.where('estado', isEqualTo: 'operativo').count().get();
-      final defectuososSnapshot = await productosRef.where('estado', isEqualTo: 'defectuoso').count().get();
       final fueraServicioSnapshot = await productosRef
-          .where('estado', whereIn: ['fuera de servicio', 'fuera_servicio'])
+          .where('estado', whereIn: ['fuera de servicio', 'fuera_servicio', 'defectuoso'])
           .count()
           .get();
 
       _totalOperativos = operativosSnapshot.count ?? 0;
-      _totalDefectuosos = defectuososSnapshot.count ?? 0;
       _totalFueraServicio = fueraServicioSnapshot.count ?? 0;
 
       final hoy = DateTime.now();
@@ -131,7 +128,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final totalInventario = _totalOperativos + _totalDefectuosos + _totalFueraServicio;
+    final totalInventario = _totalOperativos + _totalFueraServicio;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
@@ -168,13 +165,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
                             ),
                             PieChartSectionData(
-                              color: const Color(0xFFF39C12),
-                              value: _totalDefectuosos.toDouble(),
-                              title: '$_totalDefectuosos\nDef',
-                              radius: 60,
-                              titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                            PieChartSectionData(
                               color: const Color(0xFFE74C3C),
                               value: _totalFueraServicio.toDouble(),
                               title: '$_totalFueraServicio\nFS',
@@ -190,8 +180,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _LegendItem(color: Color(0xFF2ECC71), text: "Operativo"),
-                      SizedBox(width: 20),
-                      _LegendItem(color: Color(0xFFF39C12), text: "Defectuoso"),
                       SizedBox(width: 20),
                       _LegendItem(color: Color(0xFFE74C3C), text: "Fuera de Servicio"),
                     ],

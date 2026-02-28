@@ -48,24 +48,7 @@ class ListaProductosScreen extends StatelessWidget {
               ),
             ),
             
-            _buildProductStream(['fuera_servicio', 'fuera de servicio'], 'fuera de servicio', context),
-
-            // --- SECCIÓN: DEFECTUOSO ---
-            const Padding(
-              padding: EdgeInsets.only(top: 30, left: 15, bottom: 5),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
-                  SizedBox(width: 6),
-                  Text(
-                    "DEFECTUOSO",
-                    style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-
-            _buildProductStream(['defectuoso'], 'defectuoso', context),
+            _buildProductStream(['fuera_servicio', 'fuera de servicio', 'defectuoso'], 'fuera de servicio', context),
             
             // --- SECCIÓN: OPERATIVO ---
             const Padding(
@@ -123,7 +106,7 @@ class ListaProductosScreen extends StatelessWidget {
       query = query.where('categoria', isEqualTo: filterValue);
     }
     
-    // 3. Aplicar el filtro de estado (operativo / defectuoso / fuera_servicio)
+    // 3. Aplicar el filtro de estado (operativo / fuera_servicio)
     if (estados.length == 1) {
       query = query.where('estado', isEqualTo: estados.first);
     } else {
@@ -198,12 +181,9 @@ class _ProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final String normalizedEstado = estado.toLowerCase();
     final bool isOperativo = normalizedEstado == 'operativo';
-    final bool isDefectuoso = normalizedEstado == 'defectuoso';
     final Color dotColor = isOperativo
         ? const Color(0xFF2ECC71)
-        : isDefectuoso
-            ? const Color(0xFFF39C12)
-            : const Color(0xFFE74C3C);
+        : const Color(0xFFE74C3C);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
@@ -270,11 +250,6 @@ class _ProductCard extends StatelessWidget {
                             decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
                           ),
                           const SizedBox(width: 6),
-                          if (isDefectuoso)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 6),
-                              child: Icon(Icons.warning_amber, size: 14, color: Color(0xFFF39C12)),
-                            ),
                           Text(
                             _formatEstadoLabel(estado),
                             style: TextStyle(color: dotColor, fontSize: 12, fontWeight: FontWeight.bold),

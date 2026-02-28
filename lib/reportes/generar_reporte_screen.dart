@@ -43,12 +43,12 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
   final TextEditingController _costoEstimadoCtrl = TextEditingController();
 
   String _nuevoEstado = 'OPERATIVO';
-  String _condicionFisica = 'buena';
+  String _condicionFisica = 'bueno';
   String? _tipoReporte;
   String? _tipoMantenimiento;
-  String _nivelCriticidad = 'medio';
+  String _nivelCriticidad = 'bajo';
   String _impactoFalla = 'operacion';
-  String _riesgoNormativo = 'cumple';
+  String _riesgoNormativo = 'bajo';
   bool _requiereReemplazo = false;
 
   DateTime _fechaInspeccion = DateTime.now();
@@ -61,9 +61,10 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
   @override
   void initState() {
     super.initState();
-    _nuevoEstado = widget.initialStatus.toUpperCase();
+    _nuevoEstado = _normalizeEstadoOperativo(widget.initialStatus);
     _loadDisciplina();
     _autoFillEncargado();
+    _recalculateCriticidad();
   }
 
   @override
@@ -437,16 +438,22 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             if (_showEstadoOperativo)
               _buildSegmentedControl(
                 label: "Estado operativo del activo*",
-                options: const ['OPERATIVO', 'DEFECTUOSO', 'FUERA_SERVICIO'],
+                options: const ['OPERATIVO', 'FUERA_SERVICIO'],
                 value: _nuevoEstado,
-                onChanged: (newValue) => setState(() => _nuevoEstado = newValue),
+                onChanged: (newValue) => setState(() {
+                  _nuevoEstado = newValue;
+                  _recalculateCriticidad();
+                }),
               ),
 
             _buildDropdownField(
               label: "Condición Física",
               value: _condicionFisica,
-              items: const ['buena', 'regular', 'mala'],
-              onChanged: (value) => setState(() => _condicionFisica = value ?? _condicionFisica),
+              items: const ['bueno', 'regular', 'malo'],
+              onChanged: (value) => setState(() {
+                _condicionFisica = value ?? _condicionFisica;
+                _recalculateCriticidad();
+              }),
             ),
             if (_showTipoMantenimiento)
               _buildSegmentedControl(
@@ -455,11 +462,9 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
                 value: _tipoMantenimiento ?? 'preventivo',
                 onChanged: (newValue) => setState(() => _tipoMantenimiento = newValue),
               ),
-            _buildDropdownField(
-              label: "Nivel de Criticidad",
-              value: _nivelCriticidad,
-              items: const ['alto', 'medio', 'bajo'],
-              onChanged: (value) => setState(() => _nivelCriticidad = value ?? _nivelCriticidad),
+            _buildReadOnlyField(
+              "Nivel de Criticidad (Calculado)",
+              "${_formatEstadoLabel(_nivelCriticidad)} (${_criticidadScore()} pts)",
             ),
             _buildDropdownField(
               label: "Impacto de Falla",
@@ -470,8 +475,11 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
             _buildDropdownField(
               label: "Riesgo Normativo",
               value: _riesgoNormativo,
-              items: const ['cumple', 'no_cumple', 'evaluar'],
-              onChanged: (value) => setState(() => _riesgoNormativo = value ?? _riesgoNormativo),
+              items: const ['bajo', 'medio', 'alto'],
+              onChanged: (value) => setState(() {
+                _riesgoNormativo = value ?? _riesgoNormativo;
+                _recalculateCriticidad();
+              }),
             ),
             if (_showRequiereReemplazo)
               SwitchListTile(
@@ -634,6 +642,7 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
                   if (!_showTipoMantenimiento) {
                     _tipoMantenimiento = null;
                   }
+                  _recalculateCriticidad();
                 });
               },
         validator: (value) => value == null || value.isEmpty ? 'Campo requerido' : null,
@@ -826,5 +835,67 @@ class _GenerarReporteScreenState extends State<GenerarReporteScreen> {
 
   String _normalizeTipo(String? value) {
     return value?.toLowerCase().replaceAll('_', ' ').trim() ?? '';
+  }
+
+  String _normalizeEstadoOperativo(String rawEstado) {
+    final normalized = rawEstado.toLowerCase().replaceAll('_', ' ').trim();
+    if (normalized == 'fuera de servicio' || normalized == 'fuera servicio') {
+      return 'FUERA_SERVICIO';
+    }
+    if (normalized == 'defectuoso') {
+      return 'OPERATIVO';
+    }
+    return 'OPERATIVO';
+  }
+
+  int _condicionFisicaScore() {
+    switch (_condicionFisica.toLowerCase()) {
+      case 'malo':
+        return 5;
+      case 'regular':
+        return 3;
+      case 'bueno':
+      default:
+        return 1;
+    }
+  }
+
+  int _riesgoNormativoScore() {
+    switch (_riesgoNormativo.toLowerCase()) {
+      case 'alto':
+        return 5;
+      case 'medio':
+        return 3;
+      case 'bajo':
+      default:
+        return 1;
+    }
+  }
+
+  int _estadoOperativoScore() {
+    if (_nuevoEstado == 'FUERA_SERVICIO') {
+      return 5;
+    }
+    if (_nuevoEstado == 'OPERATIVO') {
+      return 1;
+    }
+    return 0;
+  }
+
+  int _criticidadScore() {
+    return _condicionFisicaScore() + _riesgoNormativoScore() + _estadoOperativoScore();
+  }
+
+  void _recalculateCriticidad() {
+    final total = _criticidadScore();
+    if (total >= 11) {
+      _nivelCriticidad = 'alto';
+      return;
+    }
+    if (total >= 7) {
+      _nivelCriticidad = 'medio';
+      return;
+    }
+    _nivelCriticidad = 'bajo';
   }
 }

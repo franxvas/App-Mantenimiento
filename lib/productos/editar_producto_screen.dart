@@ -63,7 +63,7 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
   final Map<String, TextEditingController> _dynamicControllers = {};
 
   String _estado = 'operativo';
-  static const List<String> _estadoOptions = ['operativo', 'defectuoso', 'fuera de servicio'];
+  static const List<String> _estadoOptions = ['operativo', 'fuera de servicio'];
   
   DateTime? _fechaInstalacion;
   DateTime? _fechaAdquisicion;
@@ -117,7 +117,8 @@ class _EditarProductoScreenState extends State<EditarProductoScreen> {
         '';
     final estadoInicial = widget.initialData['estado']?.toString().toLowerCase() ??
         'operativo';
-    _estado = _estadoOptions.contains(estadoInicial) ? estadoInicial : 'operativo';
+    final estadoNormalizado = estadoInicial == 'defectuoso' ? 'fuera de servicio' : estadoInicial;
+    _estado = _estadoOptions.contains(estadoNormalizado) ? estadoNormalizado : 'operativo';
     _currentImageUrl = widget.initialData['imagenUrl']; 
 
     _parametrosSchemaService.seedSchemasIfMissing();
@@ -562,7 +563,7 @@ Future<String?> _uploadToSupabase() async {
                     : null,
               ),
               readOnly: _autoGenerarId,
-              enabled: true,
+              enabled: false,
               onChanged: _autoGenerarId
                   ? null
                   : (value) {
