@@ -1,4 +1,4 @@
-# App-Mantenimiento (Mantis) 🛠️📱
+# App-Mantenimiento (AppMant) 🛠️📱
 
 Aplicación móvil desarrollada con **Flutter/Dart** para la gestión de mantenimiento y activos.  
 Utiliza **Firebase** para autenticación y base de datos, y **Supabase Storage** para el almacenamiento de imágenes (las URLs se guardan en Firebase).

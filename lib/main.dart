@@ -7,7 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide User; // Storage
 // --- IMPORTACIONES DE PANTALLAS ---
 // Asegúrate de que las rutas coincidan con tu estructura de carpetas
 import 'package:appmantflutter/auth/login_screen.dart';
-import 'package:appmantflutter/disciplinas_screen.dart'; 
+import 'package:appmantflutter/disciplinas_screen.dart';
 import 'package:appmantflutter/reportes/reportes_screen.dart';
 import 'package:appmantflutter/usuarios/lista_usuarios_screen.dart';
 import 'package:appmantflutter/scan/qr_scanner_screen.dart'; // NUEVO: Import del Escáner
@@ -18,13 +18,19 @@ import 'package:appmantflutter/auditoria/auditoria_screen.dart';
 // 1. PUNTO DE ENTRADA
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // --- A. INICIALIZAR FIREBASE ---
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    print("Firebase inicializado");
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      print("Firebase inicializado");
+    } else {
+      print(
+        "Firebase ya estaba inicializado: ${Firebase.apps.map((a) => a.name).toList()}",
+      );
+    }
   } catch (e) {
     print("Error al inicializar Firebase: $e");
   }
@@ -32,14 +38,14 @@ void main() async {
   // --- B. INICIALIZAR SUPABASE ---
   try {
     await Supabase.initialize(
-      url: 'https://qtpbivwozdnskjdqstzi.supabase.co',
-      anonKey: 'sb_publishable_79mIXMNqVBwOxX94ZDLhEg_YHd2LNzi',
+      url: 'https://sjryudocumpmddxpmscr.supabase.co',
+      anonKey: 'sb_publishable_GzpjvGBlIzZZ8Z4P7oTOCg_ysbA26TI',
     );
     print("Supabase inicializado");
   } catch (e) {
     print("Error al inicializar Supabase: $e");
   }
-  
+
   runApp(const MiAppMantenimiento());
 }
 
@@ -52,7 +58,7 @@ class MiAppMantenimiento extends StatelessWidget {
     const primaryRed = Color(0xFF8B1E1E);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Mantis',
+      title: 'AppMant',
       theme: ThemeData(
         fontFamily: 'AppUnicode',
         fontFamilyFallback: const ['AppUnicode'],
@@ -63,7 +69,11 @@ class MiAppMantenimiento extends StatelessWidget {
         appBarTheme: const AppBarTheme(
           backgroundColor: primaryRed,
           foregroundColor: Colors.white,
-          titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
           iconTheme: IconThemeData(color: Colors.white),
         ),
         floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -83,7 +93,9 @@ class MiAppMantenimiento extends StatelessWidget {
           labelStyle: const TextStyle(color: Color(0xFF2C2C2C)),
           secondaryLabelStyle: const TextStyle(color: Colors.white),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
         ),
         scaffoldBackgroundColor: const Color(0xFFF0F2F5),
       ),
@@ -92,13 +104,15 @@ class MiAppMantenimiento extends StatelessWidget {
         stream: auth.FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
           }
-          
+
           if (snapshot.hasData) {
             return const MainMenuScreen(); // Usuario logueado -> Menú
           }
-          
+
           return const LoginScreen(); // No usuario -> Login
         },
       ),
@@ -122,10 +136,10 @@ class MainMenuScreen extends StatelessWidget {
             onPressed: () async {
               await auth.FirebaseAuth.instance.signOut();
             },
-          )
+          ),
         ],
       ),
-      
+
       // --- NUEVO: BOTÓN FLOTANTE PARA ESCANEAR ---
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
@@ -137,7 +151,8 @@ class MainMenuScreen extends StatelessWidget {
         icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
         label: const Text("Escanear", style: TextStyle(color: Colors.white)),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat, // Centrado abajo
+      floatingActionButtonLocation:
+          FloatingActionButtonLocation.centerFloat, // Centrado abajo
 
       body: SafeArea(
         child: LayoutBuilder(
@@ -162,7 +177,9 @@ class MainMenuScreen extends StatelessWidget {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                              MaterialPageRoute(
+                                builder: (context) => const DashboardScreen(),
+                              ),
                             );
                           },
                         ),
@@ -208,7 +225,10 @@ class MainMenuScreen extends StatelessWidget {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const ListaUsuariosScreen()),
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const ListaUsuariosScreen(),
+                              ),
                             );
                           },
                         ),
@@ -218,7 +238,9 @@ class MainMenuScreen extends StatelessWidget {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const AuditoriaScreen()),
+                              MaterialPageRoute(
+                                builder: (context) => const AuditoriaScreen(),
+                              ),
                             );
                           },
                         ),
@@ -246,7 +268,7 @@ class _MenuCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.onTap,
-    super.key
+    super.key,
   });
 
   @override

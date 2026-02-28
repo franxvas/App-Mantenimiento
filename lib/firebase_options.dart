@@ -41,48 +41,47 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCiH4ajQRf9rPxMUBml2OHl5Bh0qPaL0O0',
-    appId: '1:275754738221:web:1adcedea494b9bd6f60ea4',
-    messagingSenderId: '275754738221',
-    projectId: 'controlmantenimientounj',
-    authDomain: 'controlmantenimientounj.firebaseapp.com',
-    storageBucket: 'controlmantenimientounj.firebasestorage.app',
-    measurementId: 'G-2KD25TF0KB',
+    apiKey: 'AIzaSyDhh2WIO4tAlH5xJjtRHCdVSk6OwKcOkbU',
+    appId: '1:263211408457:web:7b9b85449b9e980661b398',
+    messagingSenderId: '263211408457',
+    projectId: 'app-mantenimiento-95ba2',
+    authDomain: 'app-mantenimiento-95ba2.firebaseapp.com',
+    storageBucket: 'app-mantenimiento-95ba2.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyB_5NYm4ljz-MC9WzlqhOrA905UwpQHROM',
-    appId: '1:275754738221:android:e5621a257e73d2f1f60ea4',
-    messagingSenderId: '275754738221',
-    projectId: 'controlmantenimientounj',
-    storageBucket: 'controlmantenimientounj.firebasestorage.app',
+    apiKey: 'AIzaSyDqe-y-Id5d0OpthbrU0r-80YpoFekTb2U',
+    appId: '1:263211408457:android:8f02ab1b2d1731bd61b398',
+    messagingSenderId: '263211408457',
+    projectId: 'app-mantenimiento-95ba2',
+    storageBucket: 'app-mantenimiento-95ba2.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyA39eqBdQG7d_wy_KOCH8i5nprqflKphnk',
-    appId: '1:275754738221:ios:31d8a3e855605343f60ea4',
-    messagingSenderId: '275754738221',
-    projectId: 'controlmantenimientounj',
-    storageBucket: 'controlmantenimientounj.firebasestorage.app',
-    iosBundleId: 'com.example.appmantflutter',
+    apiKey: 'AIzaSyC0KzUd33AVknanZ9y8OAAEXwscn4DqcV8',
+    appId: '1:263211408457:ios:7a9306a105a97d7761b398',
+    messagingSenderId: '263211408457',
+    projectId: 'app-mantenimiento-95ba2',
+    storageBucket: 'app-mantenimiento-95ba2.firebasestorage.app',
+    iosBundleId: 'com.example.AppMant',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyA39eqBdQG7d_wy_KOCH8i5nprqflKphnk',
-    appId: '1:275754738221:ios:31d8a3e855605343f60ea4',
-    messagingSenderId: '275754738221',
-    projectId: 'controlmantenimientounj',
-    storageBucket: 'controlmantenimientounj.firebasestorage.app',
+    apiKey: 'AIzaSyC0KzUd33AVknanZ9y8OAAEXwscn4DqcV8',
+    appId: '1:263211408457:ios:87ac2b3344a505ea61b398',
+    messagingSenderId: '263211408457',
+    projectId: 'app-mantenimiento-95ba2',
+    storageBucket: 'app-mantenimiento-95ba2.firebasestorage.app',
     iosBundleId: 'com.example.appmantflutter',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyCiH4ajQRf9rPxMUBml2OHl5Bh0qPaL0O0',
-    appId: '1:275754738221:web:4fa1121fc95d3ac8f60ea4',
-    messagingSenderId: '275754738221',
-    projectId: 'controlmantenimientounj',
-    authDomain: 'controlmantenimientounj.firebaseapp.com',
-    storageBucket: 'controlmantenimientounj.firebasestorage.app',
-    measurementId: 'G-G6NFR67J57',
+    apiKey: 'AIzaSyDhh2WIO4tAlH5xJjtRHCdVSk6OwKcOkbU',
+    appId: '1:263211408457:web:ca234460461b5ed861b398',
+    messagingSenderId: '263211408457',
+    projectId: 'app-mantenimiento-95ba2',
+    authDomain: 'app-mantenimiento-95ba2.firebaseapp.com',
+    storageBucket: 'app-mantenimiento-95ba2.firebasestorage.app',
   );
+
 }

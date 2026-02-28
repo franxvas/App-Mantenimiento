@@ -1,11 +1,11 @@
 {
-    "name": "Mantis",
-    "short_name": "Mantis",
+    "name": "AppMant",
+    "short_name": "AppMant",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#8B1E1E",
     "theme_color": "#8B1E1E",
-    "description": "Mantis - Gestión de mantenimiento.",
+    "description": "AppMant - Gestión de mantenimiento.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
