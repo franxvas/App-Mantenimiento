@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:appmantflutter/services/auth_user_profile_service.dart';
 import 'dart:io';
 
 class EditarUsuarioScreen extends StatefulWidget {
@@ -26,10 +27,12 @@ class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
 
   late TextEditingController _nombreCtrl;
   late TextEditingController _dniCtrl;
-  late TextEditingController _cargoCtrl;
   late TextEditingController _areaCtrl;
   late TextEditingController _celularCtrl;
   late TextEditingController _emailCtrl;
+  late final List<String> _cargoOptions;
+  late String _cargoSeleccionado;
+  late String _rolSeleccionado;
 
   File? _newAvatarFile;
   File? _newFirmaFile;
@@ -42,11 +45,20 @@ class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
     _isAdminFuture = _isCurrentUserAdmin();
     _nombreCtrl = TextEditingController(text: widget.userData['nombre']);
     _dniCtrl = TextEditingController(text: widget.userData['dni']);
-    _cargoCtrl = TextEditingController(text: widget.userData['cargo']);
     _areaCtrl = TextEditingController(text: widget.userData['area']);
     _celularCtrl = TextEditingController(text: widget.userData['celular']);
     _emailCtrl = TextEditingController(text: widget.userData['email']);
-    
+
+    _cargoOptions = List<String>.from(AuthUserProfileService.cargoOptions);
+    final cargoActual = (widget.userData['cargo'] ?? '').toString().trim();
+    if (cargoActual.isNotEmpty && !_cargoOptions.contains(cargoActual)) {
+      _cargoOptions.add(cargoActual);
+    }
+    _cargoSeleccionado = cargoActual.isNotEmpty
+        ? cargoActual
+        : AuthUserProfileService.defaultCargo;
+    _rolSeleccionado = _sanitizeRole(widget.userData['rol']);
+
     _currentAvatarUrl = widget.userData['avatarUrl'];
     _currentFirmaUrl = widget.userData['firmaUrl'];
   }
@@ -55,7 +67,6 @@ class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
   void dispose() {
     _nombreCtrl.dispose();
     _dniCtrl.dispose();
-    _cargoCtrl.dispose();
     _areaCtrl.dispose();
     _celularCtrl.dispose();
     _emailCtrl.dispose();
@@ -65,7 +76,7 @@ class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
   Future<void> _pickImage(bool isAvatar) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
-    
+
     if (picked != null) {
       setState(() {
         if (isAvatar) {
@@ -77,27 +88,31 @@ class _EditarUsuarioScreenState extends State<EditarUsuarioScreen> {
     }
   }
 
-Future<String?> _uploadFileToSupabase(File file, String folder) async {
+  Future<String?> _uploadFileToSupabase(File file, String folder) async {
     try {
       final supabase = Supabase.instance.client;
       final fileExt = file.path.split('.').last;
-      final fileName = 'usuarios/$folder/${widget.userId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+      final fileName =
+          'usuarios/$folder/${widget.userId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
 
-      await supabase.storage.from('AppMant').upload(
-        fileName,
-        file,
-        fileOptions: const FileOptions(contentType: 'image/jpeg'),
-      );
-      
-      final String publicUrl = supabase.storage.from('AppMant').getPublicUrl(fileName);
-      
+      await supabase.storage
+          .from('AppMant')
+          .upload(
+            fileName,
+            file,
+            fileOptions: const FileOptions(contentType: 'image/jpeg'),
+          );
+
+      final String publicUrl = supabase.storage
+          .from('AppMant')
+          .getPublicUrl(fileName);
+
       return publicUrl;
-      
     } catch (e) {
       print("Error subiendo $folder: $e");
       return null;
     }
-}
+  }
 
   Future<void> _saveUser() async {
     if (!_formKey.currentState!.validate()) return;
@@ -119,16 +134,20 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
         if (url != null) finalFirmaUrl = url;
       }
 
-      await FirebaseFirestore.instance.collection('usuarios').doc(widget.userId).update({
-        'nombre': _nombreCtrl.text.trim(),
-        'dni': _dniCtrl.text.trim(),
-        'cargo': _cargoCtrl.text.trim(),
-        'area': _areaCtrl.text.trim(),
-        'celular': _celularCtrl.text.trim(),
-        'email': _emailCtrl.text.trim(),
-        'avatarUrl': finalAvatarUrl,
-        'firmaUrl': finalFirmaUrl,
-      });
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(widget.userId)
+          .update({
+            'nombre': _nombreCtrl.text.trim(),
+            'dni': _dniCtrl.text.trim(),
+            'cargo': _cargoSeleccionado,
+            'area': _areaCtrl.text.trim(),
+            'celular': _celularCtrl.text.trim(),
+            'email': _emailCtrl.text.trim(),
+            'rol': _rolSeleccionado,
+            'avatarUrl': finalAvatarUrl,
+            'firmaUrl': finalFirmaUrl,
+          });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -137,9 +156,12 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
         Navigator.pop(context);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al guardar: $e")),
-      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error al guardar: $e")));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -164,7 +186,10 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
                   child: CircularProgressIndicator(color: Colors.white),
                 );
               }
-              return IconButton(icon: const Icon(Icons.save), onPressed: _saveUser);
+              return IconButton(
+                icon: const Icon(Icons.save),
+                onPressed: _saveUser,
+              );
             },
           ),
         ],
@@ -176,7 +201,9 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.data != true) {
-            return const Center(child: Text("Acceso restringido. Solo administradores."));
+            return const Center(
+              child: Text("Acceso restringido. Solo administradores."),
+            );
           }
           return Form(
             key: _formKey,
@@ -191,16 +218,79 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
                 ),
                 const SizedBox(height: 20),
 
-                _buildTextField("Nombre y apellido", _nombreCtrl, readOnly: _isSaving, required: true),
-                _buildTextField("DNI", _dniCtrl, isNumber: true, readOnly: _isSaving, exactLength: 8, required: true),
-                _buildTextField("Cargo", _cargoCtrl, readOnly: _isSaving, required: true),
-                _buildTextField("Área", _areaCtrl, readOnly: _isSaving, required: false),
-                _buildTextField("Celular", _celularCtrl, isNumber: true, readOnly: _isSaving, exactLength: 9, required: false),
-                _buildTextField("Correo", _emailCtrl, isEmail: true, readOnly: true, required: false, borderColor: Colors.grey.shade300),
+                _buildTextField(
+                  "Nombre y apellido",
+                  _nombreCtrl,
+                  readOnly: _isSaving,
+                  required: true,
+                ),
+                _buildTextField(
+                  "DNI",
+                  _dniCtrl,
+                  isNumber: true,
+                  readOnly: _isSaving,
+                  exactLength: 8,
+                  required: true,
+                ),
+                _buildDropdownField(
+                  label: "Cargo",
+                  value: _cargoSeleccionado,
+                  items: _cargoOptions,
+                  onChanged: _isSaving
+                      ? null
+                      : (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() => _cargoSeleccionado = value);
+                        },
+                ),
+                _buildDropdownField(
+                  label: "Rol",
+                  value: _rolSeleccionado,
+                  items: const ['tecnico', 'admin'],
+                  onChanged: _isSaving
+                      ? null
+                      : (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() => _rolSeleccionado = value);
+                        },
+                ),
+                _buildTextField(
+                  "Área",
+                  _areaCtrl,
+                  readOnly: _isSaving,
+                  required: false,
+                ),
+                _buildTextField(
+                  "Celular",
+                  _celularCtrl,
+                  isNumber: true,
+                  readOnly: _isSaving,
+                  exactLength: 9,
+                  required: false,
+                ),
+                _buildTextField(
+                  "Correo",
+                  _emailCtrl,
+                  isEmail: true,
+                  readOnly: true,
+                  required: false,
+                  borderColor: Colors.grey.shade300,
+                ),
 
                 const SizedBox(height: 20),
 
-                const Text("Firma Digital", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF2C3E50))),
+                const Text(
+                  "Firma Digital",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Color(0xFF2C3E50),
+                  ),
+                ),
                 const SizedBox(height: 10),
                 GestureDetector(
                   onTap: () => _pickImage(false),
@@ -214,58 +304,69 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
       ),
     );
   }
-  
 
   Widget _buildAvatar(bool showCamera) {
-      return Stack(
-          children: [
-              CircleAvatar(
-                  radius: 60,
-                  backgroundColor: Colors.grey[300],
-                  backgroundImage: _newAvatarFile != null
-                      ? FileImage(_newAvatarFile!) as ImageProvider
-                      : (_currentAvatarUrl != null && _currentAvatarUrl!.isNotEmpty)
-                          ? NetworkImage(_currentAvatarUrl!)
-                          : null,
-                  child: (_newAvatarFile == null && (_currentAvatarUrl == null || _currentAvatarUrl!.isEmpty))
-                      ? const Icon(Icons.person, size: 60, color: Colors.grey)
-                      : null,
+    return Stack(
+      children: [
+        CircleAvatar(
+          radius: 60,
+          backgroundColor: Colors.grey[300],
+          backgroundImage: _newAvatarFile != null
+              ? FileImage(_newAvatarFile!) as ImageProvider
+              : (_currentAvatarUrl != null && _currentAvatarUrl!.isNotEmpty)
+              ? NetworkImage(_currentAvatarUrl!)
+              : null,
+          child:
+              (_newAvatarFile == null &&
+                  (_currentAvatarUrl == null || _currentAvatarUrl!.isEmpty))
+              ? const Icon(Icons.person, size: 60, color: Colors.grey)
+              : null,
+        ),
+        if (showCamera)
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: const BoxDecoration(
+                color: Color(0xFF3498DB),
+                shape: BoxShape.circle,
               ),
-              if (showCamera)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(color: Color(0xFF3498DB), shape: BoxShape.circle),
-                    child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                  ),
-                ),
-          ],
-      );
+              child: const Icon(
+                Icons.camera_alt,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   Widget _buildFirma() {
-      return Container(
-          height: 120,
-          width: double.infinity,
-          decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade400),
-              borderRadius: BorderRadius.circular(8),
-          ),
-          child: _newFirmaFile != null
-              ? Image.file(_newFirmaFile!, fit: BoxFit.contain)
-              : (_currentFirmaUrl != null && _currentFirmaUrl!.isNotEmpty)
-                  ? Image.network(_currentFirmaUrl!, fit: BoxFit.contain)
-                  : const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                          Icon(Icons.draw, color: Colors.grey, size: 30),
-                          Text("Toca para subir imagen de firma", style: TextStyle(color: Colors.grey)),
-                      ],
-                  ),
-      );
+    return Container(
+      height: 120,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey.shade400),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: _newFirmaFile != null
+          ? Image.file(_newFirmaFile!, fit: BoxFit.contain)
+          : (_currentFirmaUrl != null && _currentFirmaUrl!.isNotEmpty)
+          ? Image.network(_currentFirmaUrl!, fit: BoxFit.contain)
+          : const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.draw, color: Colors.grey, size: 30),
+                Text(
+                  "Toca para subir imagen de firma",
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ],
+            ),
+    );
   }
 
   Widget _buildTextField(
@@ -283,10 +384,14 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
       child: TextFormField(
         controller: ctrl,
         readOnly: readOnly,
-        keyboardType: isNumber ? TextInputType.number : (isEmail ? TextInputType.emailAddress : TextInputType.text),
+        keyboardType: isNumber
+            ? TextInputType.number
+            : (isEmail ? TextInputType.emailAddress : TextInputType.text),
         decoration: InputDecoration(
           labelText: label,
-          border: OutlineInputBorder(borderSide: BorderSide(color: borderColor ?? Colors.grey.shade300)),
+          border: OutlineInputBorder(
+            borderSide: BorderSide(color: borderColor ?? Colors.grey.shade300),
+          ),
           filled: true,
           fillColor: readOnly ? Colors.grey[200] : Colors.white,
         ),
@@ -310,6 +415,43 @@ Future<String?> _uploadFileToSupabase(File file, String folder) async {
         },
       ),
     );
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?>? onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: DropdownButtonFormField<String>(
+        initialValue: items.contains(value) ? value : items.first,
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          filled: true,
+          fillColor: onChanged == null ? Colors.grey[200] : Colors.white,
+        ),
+        items: items
+            .map(
+              (item) =>
+                  DropdownMenuItem<String>(value: item, child: Text(item)),
+            )
+            .toList(),
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  String _sanitizeRole(dynamic rawRole) {
+    final role = (rawRole ?? '').toString().trim().toLowerCase();
+    if (role == 'admin') {
+      return 'admin';
+    }
+    return 'tecnico';
   }
 
   Future<bool> _isCurrentUserAdmin() async {

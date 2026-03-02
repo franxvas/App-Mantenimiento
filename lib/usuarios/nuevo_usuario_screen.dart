@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:appmantflutter/services/auth_user_profile_service.dart';
 
 class NuevoUsuarioScreen extends StatefulWidget {
   const NuevoUsuarioScreen({super.key});
@@ -11,14 +12,13 @@ class NuevoUsuarioScreen extends StatefulWidget {
 
 class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
   final _formKey = GlobalKey<FormState>();
-  
+
   final _nombreCtrl = TextEditingController();
   final _dniCtrl = TextEditingController();
-  final _cargoCtrl = TextEditingController();
   final _areaCtrl = TextEditingController();
   final _celularCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  String _rolSeleccionado = 'tecnico';
+  String _cargoSeleccionado = AuthUserProfileService.cargoOptions.first;
 
   Future<void> _guardarUsuario() async {
     if (_formKey.currentState!.validate()) {
@@ -26,11 +26,13 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
         await FirebaseFirestore.instance.collection('usuarios').add({
           'nombre': _nombreCtrl.text.trim(),
           'dni': _dniCtrl.text.trim(),
-          'cargo': _cargoCtrl.text.trim(),
-          'area': _areaCtrl.text.trim(),
+          'cargo': _cargoSeleccionado,
+          'area': _areaCtrl.text.trim().isEmpty
+              ? AuthUserProfileService.defaultArea
+              : _areaCtrl.text.trim(),
           'celular': _celularCtrl.text.trim(),
           'email': _emailCtrl.text.trim(),
-          'rol': _rolSeleccionado,
+          'rol': AuthUserProfileService.defaultRol,
           'fechaRegistro': FieldValue.serverTimestamp(),
           'avatarUrl': '',
           'firmaUrl': '',
@@ -43,17 +45,23 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
           Navigator.pop(context);
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar: $e')),
-        );
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
       }
     }
   }
 
   @override
   void dispose() {
-    _nombreCtrl.dispose(); _dniCtrl.dispose(); _cargoCtrl.dispose();
-    _areaCtrl.dispose(); _celularCtrl.dispose(); _emailCtrl.dispose();
+    _nombreCtrl.dispose();
+    _dniCtrl.dispose();
+    _areaCtrl.dispose();
+    _celularCtrl.dispose();
+    _emailCtrl.dispose();
     super.dispose();
   }
 
@@ -61,9 +69,7 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        title: const Text("Agregar Nuevo Usuario"),
-      ),
+      appBar: AppBar(title: const Text("Agregar Nuevo Usuario")),
       body: FutureBuilder<bool>(
         future: _isCurrentUserAdmin(),
         builder: (context, snapshot) {
@@ -71,7 +77,9 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.data != true) {
-            return const Center(child: Text("Acceso restringido. Solo administradores."));
+            return const Center(
+              child: Text("Acceso restringido. Solo administradores."),
+            );
           }
           return Form(
             key: _formKey,
@@ -81,25 +89,49 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildInputLabel("Nombre y apellido*"),
-                  _buildTextField(_nombreCtrl, "Ingrese nombre y apellido", required: true),
+                  _buildTextField(
+                    _nombreCtrl,
+                    "Ingrese nombre y apellido",
+                    required: true,
+                  ),
 
                   _buildInputLabel("DNI*"),
-                  _buildTextField(_dniCtrl, "Ingrese DNI (8 dígitos)", required: true, isNumber: true, exactLength: 8),
+                  _buildTextField(
+                    _dniCtrl,
+                    "Ingrese DNI (8 dígitos)",
+                    required: true,
+                    isNumber: true,
+                    exactLength: 8,
+                  ),
 
                   _buildInputLabel("Cargo*"),
-                  _buildTextField(_cargoCtrl, "Ej: Técnico Electricista", required: true),
+                  _buildCargoDropdown(),
 
                   _buildInputLabel("Área"),
-                  _buildTextField(_areaCtrl, "Ej: Mantenimiento", required: false),
+                  _buildTextField(
+                    _areaCtrl,
+                    "Ej: Mantenimiento (si se deja vacío: Por asignar)",
+                    required: false,
+                  ),
 
                   _buildInputLabel("Celular"),
-                  _buildTextField(_celularCtrl, "Ingrese celular (9 dígitos)", isNumber: true, exactLength: 9),
+                  _buildTextField(
+                    _celularCtrl,
+                    "Ingrese celular (9 dígitos)",
+                    isNumber: true,
+                    exactLength: 9,
+                  ),
 
                   _buildInputLabel("Correo"),
                   _buildTextField(_emailCtrl, "Ingrese correo", isEmail: true),
-
-                  _buildInputLabel("Rol*"),
-                  _buildRoleSelector(),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Rol asignado por defecto: ${AuthUserProfileService.defaultRol.toUpperCase()}",
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF6C757D),
+                    ),
+                  ),
 
                   const SizedBox(height: 30),
 
@@ -119,7 +151,7 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
                         child: const Text("Guardar"),
                       ),
                     ],
-                  )
+                  ),
                 ],
               ),
             ),
@@ -152,7 +184,14 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
   Widget _buildInputLabel(String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, top: 15),
-      child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF495057))),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF495057),
+        ),
+      ),
     );
   }
 
@@ -173,8 +212,14 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
         hintText: hint,
         filled: true,
         fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCED4DA))),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFCED4DA)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
       ),
       validator: (value) {
         if (required && (value == null || value.isEmpty)) {
@@ -194,36 +239,26 @@ class _NuevoUsuarioScreenState extends State<NuevoUsuarioScreen> {
     );
   }
 
-  Widget _buildRoleSelector() {
-    final isAdmin = _rolSeleccionado == 'admin';
-    final isTecnico = _rolSeleccionado == 'tecnico';
-
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton(
-            onPressed: () => setState(() => _rolSeleccionado = 'admin'),
-            style: OutlinedButton.styleFrom(
-              backgroundColor: isAdmin ? const Color(0xFF3498DB) : Colors.white,
-              foregroundColor: isAdmin ? Colors.white : const Color(0xFF3498DB),
-              side: const BorderSide(color: Color(0xFF3498DB)),
-            ),
-            child: const Text("Administrador"),
-          ),
+  Widget _buildCargoDropdown() {
+    return DropdownButtonFormField<String>(
+      initialValue: _cargoSeleccionado,
+      items: AuthUserProfileService.cargoOptions
+          .map((cargo) => DropdownMenuItem(value: cargo, child: Text(cargo)))
+          .toList(),
+      onChanged: (value) {
+        if (value == null) {
+          return;
+        }
+        setState(() => _cargoSeleccionado = value);
+      },
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFCED4DA)),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton(
-            onPressed: () => setState(() => _rolSeleccionado = 'tecnico'),
-            style: OutlinedButton.styleFrom(
-              backgroundColor: isTecnico ? const Color(0xFF3498DB) : Colors.white,
-              foregroundColor: isTecnico ? Colors.white : const Color(0xFF3498DB),
-              side: const BorderSide(color: Color(0xFF3498DB)),
-            ),
-            child: const Text("Técnico"),
-          ),
-        ),
-      ],
+      ),
     );
   }
 

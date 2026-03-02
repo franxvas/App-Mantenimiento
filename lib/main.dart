@@ -3,6 +3,8 @@ import 'package:firebase_core/firebase_core.dart'; // Base de Datos
 import 'package:firebase_auth/firebase_auth.dart' as auth; // Autenticación
 import 'package:appmantflutter/firebase_options.dart'; // Configuración generada
 import 'package:supabase_flutter/supabase_flutter.dart' hide User; // Storage
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
 
 // --- IMPORTACIONES DE PANTALLAS ---
 // Asegúrate de que las rutas coincidan con tu estructura de carpetas
@@ -56,6 +58,7 @@ class MiAppMantenimiento extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const primaryRed = Color(0xFF8B1E1E);
+    final hasUser = auth.FirebaseAuth.instance.currentUser != null;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'AppMant',
@@ -99,23 +102,11 @@ class MiAppMantenimiento extends StatelessWidget {
         ),
         scaffoldBackgroundColor: const Color(0xFFF0F2F5),
       ),
-      // --- AUTH GATE: DECIDE QUÉ PANTALLA MOSTRAR ---
-      home: StreamBuilder<auth.User?>(
-        stream: auth.FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-
-          if (snapshot.hasData) {
-            return const MainMenuScreen(); // Usuario logueado -> Menú
-          }
-
-          return const LoginScreen(); // No usuario -> Login
-        },
-      ),
+      initialRoute: hasUser ? '/menu' : '/login',
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/menu': (context) => const MainMenuScreen(),
+      },
     );
   }
 }
@@ -134,7 +125,17 @@ class MainMenuScreen extends StatelessWidget {
             icon: const Icon(Icons.logout, color: Colors.white),
             tooltip: 'Cerrar Sesión',
             onPressed: () async {
+              if (!kIsWeb) {
+                try {
+                  await GoogleSignIn().signOut();
+                } catch (_) {}
+              }
               await auth.FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil('/login', (route) => false);
+              }
             },
           ),
         ],
