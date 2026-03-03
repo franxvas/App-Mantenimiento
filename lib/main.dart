@@ -36,10 +36,7 @@ void main() async {
   } catch (e) {
     print("Error al inicializar Firebase: $e");
   }
-final app = Firebase.app();
-print("🔥 PROJECT ID: ${app.options.projectId}");
-print("🔥 SENDER ID: ${app.options.messagingSenderId}");
-print("🔥 APP ID: ${app.options.appId}");
+  
   // --- B. INICIALIZAR SUPABASE ---
   try {
     await Supabase.initialize(
