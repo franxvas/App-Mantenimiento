@@ -72,7 +72,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '263211408457',
     projectId: 'app-mantenimiento-95ba2',
     storageBucket: 'app-mantenimiento-95ba2.firebasestorage.app',
-    iosBundleId: 'com.example.appmantflutter',
+    iosBundleId: 'com.example.AppMant',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
