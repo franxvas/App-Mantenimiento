@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart'; // Para generar el QR
 
-// IMPORTACIONES DE TUS OTRAS PANTALLAS Y SERVICIOS
+// IMPORTACIONES DE OTRAS PANTALLAS Y SERVICIOS
 import 'package:appmantflutter/reportes/generar_reporte_screen.dart'; 
 import 'package:appmantflutter/productos/editar_producto_screen.dart'; 
 import 'package:appmantflutter/services/pdf_service.dart'; 
